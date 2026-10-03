@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Submit Picks{% endblock %}
+{% block content %}
+<h2>Week {{ week }} picks — {{ member.name }}</h2>
+{% if request.query_params.get('saved') %}
+<p class="ok">Picks saved. Each pick locks at its own game's kickoff.</p>
+{% endif %}
+{% if locked %}
+<p>Your locked player: <strong>{{ locked.name }}</strong> ({{ locked.team }} {{ locked.position }}) — scores automatically.</p>
+{% else %}
+<p class="warn">You have no locked player yet — the commissioner needs to record your draft pick.</p>
+{% endif %}
+{% for e in errors %}<p class="err">{{ e }}</p>{% endfor %}
+{% if existing %}
+<p>Current picks for this week: {{ existing|join(', ') }} (submitting again replaces them while games are still open)</p>
+{% endif %}
+<form method="post">
+  {% for i in range(1,5) %}
+  <label>Pick {{ i }}:
+    <input name="pick{{ i }}" list="players" autocomplete="off" required>
+  </label><br>
+  {% endfor %}
+  <datalist id="players">
+    {% for p in players %}
+    {% set ko = kickoffs.get(p.team) %}
+    <option value="{{ p.name }}">{{ p.team }} {{ p.position }}
+      {%- if p.name in locked_names %} · LOCKED
+      {%- elif p.status and p.status != 'ACT' %} · {{ p.status }}
+      {%- elif ko and ko <= now %} · STARTED
+      {%- elif not ko %} · BYE{% endif %}</option>
+    {% endfor %}
+  </datalist>
+  <button type="submit">Submit picks</button>
+</form>
+<p class="note">Each pick locks when that player's game kicks off. Bye-week or inactive picks score 0.</p>
+{% endblock %}

@@ -1,0 +1,9 @@
+[Unit]
+Description=ravixfs data poller
+
+[Service]
+Type=oneshot
+User=ravixfs
+Group=ravixfs
+EnvironmentFile=/etc/ravixfs.env
+ExecStart=/opt/ravixfs/venv/bin/python /opt/ravixfs/poller/poll.py

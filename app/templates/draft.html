@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Draft Board{% endblock %}
+{% block content %}
+<h2>Locked Players — {{ season }}</h2>
+<table>
+  <tr><th>Member</th><th>Player</th><th>Team</th><th>Pos</th><th>Acquired</th><th>Since Wk</th></tr>
+  {% for r in rows %}
+  <tr><td>{{ r.member }}</td><td>{{ r.player }}</td><td>{{ r.team }}</td>
+      <td>{{ r.position }}</td><td>{{ r.acquired_via }}</td><td>{{ r.since_week }}</td></tr>
+  {% endfor %}
+</table>
+{% if moves %}
+<h3>Roster moves</h3>
+<table>
+  <tr><th>Member</th><th>Player</th><th>Via</th><th>Week</th></tr>
+  {% for m in moves %}
+  <tr><td>{{ m.member }}</td><td>{{ m.player }}</td><td>{{ m.acquired_via }}</td><td>{{ m.since_week }}</td></tr>
+  {% endfor %}
+</table>
+{% endif %}
+{% endblock %}

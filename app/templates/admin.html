@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Admin{% endblock %}
+{% block content %}
+<h2>Commissioner Admin</h2>
+
+<h3>Members</h3>
+<table>
+  <tr><th>Name</th><th>Pick link</th></tr>
+  {% for m in members %}
+  <tr><td>{{ m.name }}</td>
+      <td><code>/submit/{{ m.pick_token }}</code></td></tr>
+  {% endfor %}
+</table>
+<form method="post" action="/admin/{{ token }}/members/add">
+  <input name="name" placeholder="New member name" required>
+  <button>Add member</button>
+</form>
+
+<h3>Record draft pick</h3>
+<form method="post" action="/admin/{{ token }}/draft">
+  <input name="member_id" placeholder="member id" required size="6">
+  <input name="player" list="allp" placeholder="Player name" required>
+  <input name="week" placeholder="week" size="4" value="5">
+  <button>Record draft</button>
+</form>
+
+<h3>Record injury redraft</h3>
+<form method="post" action="/admin/{{ token }}/redraft">
+  <input name="member_id" placeholder="member id" required size="6">
+  <input name="player" list="allp" placeholder="Replacement player" required>
+  <input name="week" placeholder="week" size="4" value="5">
+  <button>Record redraft</button>
+</form>
+
+<h3>Record trade (straight swap of locked players)</h3>
+<form method="post" action="/admin/{{ token }}/trade">
+  <input name="giver_id" placeholder="giver member id" required size="6">
+  <input name="receiver_id" placeholder="receiver member id" required size="6">
+  <input name="week" placeholder="week" size="4" value="5">
+  <button>Record trade</button>
+</form>
+
+<h3>Scoring config</h3>
+<p>Changing these recalculates <em>all</em> past weeks instantly — points are never stored.</p>
+<table>
+  <tr><th>Stat</th><th>Points</th><th></th></tr>
+  {% for s in scoring %}
+  <tr><form method="post" action="/admin/{{ token }}/scoring">
+    <td>{{ s.stat_key }}</td>
+    <td><input type="hidden" name="stat_key" value="{{ s.stat_key }}">
+        <input name="points" type="number" step="0.01" value="{{ s.points }}" size="6"></td>
+    <td><button>Update</button></td>
+  </form></tr>
+  {% endfor %}
+</table>
+
+<datalist id="allp"></datalist>
+{% endblock %}

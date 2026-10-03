@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Standings{% endblock %}
+{% block content %}
+<h2>{{ season }} Standings <small>(through week {{ through_week }})</small></h2>
+<table>
+  <tr><th>#</th><th>Member</th><th>Points</th></tr>
+  {% for mid, name, total in table %}
+  <tr><td>{{ loop.index }}</td><td>{{ name }}</td><td><strong>{{ "%.1f"|format(total) }}</strong></td></tr>
+  {% endfor %}
+</table>
+<h3>Weeks</h3>
+<p>
+{% for w in range(1, through_week + 1) %}
+  <a href="/week/{{ season }}/{{ w }}">Week {{ w }}</a>{% if not loop.last %} · {% endif %}
+{% endfor %}
+</p>
+<h3>Scoring</h3>
+<table class="scoring">
+{% for k, v in scoring.items() %}
+  <tr><td>{{ k.replace('_',' ') }}</td><td>{{ v }}</td></tr>
+{% endfor %}
+</table>
+<p class="note">Defensive TD points stack on the turnover (pick-6 = 3 + 6 = 9).</p>
+{% endblock %}

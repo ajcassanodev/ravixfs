@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Trades{% endblock %}
+{% block content %}
+<h2>Trade Log — {{ season }}</h2>
+{% if rows %}
+<table>
+  <tr><th>Week</th><th>From</th><th>To</th><th>Player</th><th>Recorded</th></tr>
+  {% for r in rows %}
+  <tr><td>{{ r.week }}</td><td>{{ r.giver }}</td><td>{{ r.receiver }}</td>
+      <td>{{ r.player }}</td><td>{{ r.recorded_at[:16].replace('T',' ') }}</td></tr>
+  {% endfor %}
+</table>
+{% else %}
+<p>No trades recorded yet.</p>
+{% endif %}
+{% endblock %}

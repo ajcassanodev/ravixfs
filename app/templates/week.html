@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Week {{ week }}{% endblock %}
+{% block content %}
+<h2>Week {{ week }}, {{ season }}</h2>
+{% for name, total, lines in detail %}
+<h3>{{ name }} — {{ "%.1f"|format(total) }}</h3>
+<table>
+  <tr><th>Player</th><th>Team</th><th>Src</th><th>Pts</th>
+    {% for k in stat_keys %}<th>{{ k.replace('_',' ')[:9] }}</th>{% endfor %}</tr>
+  {% for pid, pname, pteam, src, pts, stats in lines %}
+  <tr>
+    <td>{{ pname }}</td><td>{{ pteam }}</td><td>{{ src }}</td>
+    <td><strong>{{ "%.1f"|format(pts) }}</strong></td>
+    {% for k in stat_keys %}<td>{{ stats[k]|int if stats[k]==stats[k]|int else stats[k] }}</td>{% endfor %}
+  </tr>
+  {% endfor %}
+</table>
+{% endfor %}
+{% endblock %}
