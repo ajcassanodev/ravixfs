@@ -45,7 +45,7 @@ def _resolve_player(con, name: str):
 def index(request: Request):
     con = _db.connect()
     season = _db.current_season(con)
-    table = scoring.standings(con, season)
+    table, test_table = scoring.standings(con, season)
     wrow = con.execute(
         "SELECT MAX(week) AS w FROM weekly_stats WHERE season = ?", (season,)
     ).fetchone()
@@ -53,6 +53,7 @@ def index(request: Request):
     con.close()
     return templates.TemplateResponse(request, "index.html", {
         "request": request, "season": season, "table": table,
+        "test_table": test_table,
         "through_week": wrow["w"] or 0, "scoring": cfg,
     })
 
@@ -117,6 +118,11 @@ def trade_log(request: Request):
     return templates.TemplateResponse(request, "trades.html", {
         "request": request, "season": season, "rows": rows,
     })
+
+
+@app.get("/guide", response_class=HTMLResponse)
+def guide(request: Request):
+    return templates.TemplateResponse(request, "guide.html", {"request": request})
 
 
 @app.get("/submit/{token}", response_class=HTMLResponse)
@@ -253,7 +259,7 @@ def admin_home(request: Request, token: str):
 
 
 @app.post("/admin/{token}/members/add")
-def admin_add_member(token: str, name: str = Form("")):
+def admin_add_member(token: str, name: str = Form(""), is_test: int = Form(0)):
     if not _admin_ok(token):
         raise HTTPException(404, "not found")
     name = name.strip()
@@ -261,7 +267,10 @@ def admin_add_member(token: str, name: str = Form("")):
         raise HTTPException(400, "name required")
     con = _db.connect()
     pt = secrets.token_urlsafe(16)
-    con.execute("INSERT INTO members (name, pick_token) VALUES (?,?)", (name, pt))
+    con.execute(
+        "INSERT INTO members (name, pick_token, is_test) VALUES (?,?,?)",
+        (name, pt, 1 if is_test else 0),
+    )
     con.commit()
     con.close()
     return RedirectResponse(f"/admin/{token}", status_code=303)

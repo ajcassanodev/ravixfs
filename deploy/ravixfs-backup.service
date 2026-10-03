@@ -1,0 +1,8 @@
+[Unit]
+Description=ravixfs nightly database backup (prod + staging)
+
+[Service]
+Type=oneshot
+User=ravixfs
+Group=ravixfs
+ExecStart=/opt/ravixfs/deploy/backup.sh

@@ -7,4 +7,5 @@ User=ravixfs
 Group=ravixfs
 WorkingDirectory=/opt/ravixfs
 # Pull latest code; restart the app only when something changed.
-ExecStart=/bin/bash -c 'BEFORE=$(git rev-parse HEAD); git pull --ff-only --quiet; AFTER=$(git rev-parse HEAD); if [ "$BEFORE" != "$AFTER" ]; then /opt/ravixfs/venv/bin/pip install -q -r requirements.txt; systemctl restart ravixfs.service; fi'
+# (sudo is allowed for this one command via /etc/sudoers.d/ravixfs)
+ExecStart=/bin/bash -c 'BEFORE=$(git rev-parse HEAD); git pull --ff-only --quiet; AFTER=$(git rev-parse HEAD); if [ "$BEFORE" != "$AFTER" ]; then /opt/ravixfs/venv/bin/pip install -q -r requirements.txt; sudo /bin/systemctl restart ravixfs.service; fi'

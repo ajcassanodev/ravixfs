@@ -19,8 +19,17 @@ def init_db() -> None:
     con = connect()
     with open(SCHEMA_PATH) as f:
         con.executescript(f.read())
+    # Migrations for DBs created before a column existed (init_db is
+    # re-run on every deploy, so this must stay idempotent).
+    _migrate(con)
     con.commit()
     con.close()
+
+
+def _migrate(con) -> None:
+    cols = {r["name"] for r in con.execute("PRAGMA table_info(members)")}
+    if "is_test" not in cols:
+        con.execute("ALTER TABLE members ADD COLUMN is_test INTEGER NOT NULL DEFAULT 0")
 
 
 def utcnow_iso() -> str:

@@ -40,7 +40,8 @@ CREATE INDEX IF NOT EXISTS idx_games_kickoff ON games(kickoff_utc);
 CREATE TABLE IF NOT EXISTS members (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   name       TEXT NOT NULL,
-  pick_token TEXT NOT NULL UNIQUE       -- secret per-member submit URL
+  pick_token TEXT NOT NULL UNIQUE,      -- secret per-member submit URL
+  is_test    INTEGER NOT NULL DEFAULT 0 -- 1 = test member, hidden from real standings
 );
 
 -- One active row per member (partial unique index enforces it).

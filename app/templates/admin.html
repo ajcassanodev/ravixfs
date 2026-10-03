@@ -5,14 +5,16 @@
 
 <h3>Members</h3>
 <table>
-  <tr><th>Name</th><th>Pick link</th></tr>
+  <tr><th>Name</th><th>Test?</th><th>Pick link</th></tr>
   {% for m in members %}
   <tr><td>{{ m.name }}</td>
+      <td>{% if m.is_test %}yes{% else %}—{% endif %}</td>
       <td><code>/submit/{{ m.pick_token }}</code></td></tr>
   {% endfor %}
 </table>
 <form method="post" action="/admin/{{ token }}/members/add">
   <input name="name" placeholder="New member name" required>
+  <label><input type="checkbox" name="is_test" value="1"> test member</label>
   <button>Add member</button>
 </form>
 

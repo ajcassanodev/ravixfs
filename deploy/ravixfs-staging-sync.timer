@@ -1,0 +1,9 @@
+[Unit]
+Description=ravixfs staging code sync (every 5 min)
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target

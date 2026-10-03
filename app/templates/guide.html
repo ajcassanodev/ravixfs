@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}How to Play{% endblock %}
+{% block content %}
+<h2>How to Play</h2>
+<p>Welcome to the test season! This is a weekly picks game using NFL <strong>defensive</strong> players.</p>
+
+<h3>Your pick link</h3>
+<p>The commissioner sent you a private link. That link <strong>is</strong> your login — don't share it. Open it each week to submit your 4 picks.</p>
+
+<h3>Your locked player</h3>
+<p>Before the season you drafted one defensive player. He's yours all season and scores for you automatically every week. You never have to pick him.</p>
+
+<h3>Weekly picks</h3>
+<p>Each week pick 4 more defensive players — anyone who isn't someone else's locked player. Your locked player + your 4 picks = your 5 scorers.</p>
+
+<h3>When picks lock</h3>
+<p>Each player locks when <em>his</em> game kicks off. Pick a Thursday night guy and he locks Thursday; your Sunday picks stay open until their games start. Anything submitted after kickoff doesn't count.</p>
+
+<h3>Scoring</h3>
+<table class="scoring">
+  <tr><td>Tackle</td><td>0.1</td></tr>
+  <tr><td>Sack</td><td>2</td></tr>
+  <tr><td>Forced fumble</td><td>3</td></tr>
+  <tr><td>Fumble recovery</td><td>3</td></tr>
+  <tr><td>Interception</td><td>3</td></tr>
+  <tr><td>Safety</td><td>4</td></tr>
+  <tr><td>Defensive TD</td><td>+6 on top of the turnover</td></tr>
+</table>
+<p class="note">A pick-6 scores 3 + 6 = 9.</p>
+
+<h3>Bye weeks &amp; injuries</h3>
+<p>Pick a guy on a bye or who doesn't suit up and that slot scores zero. No other penalty — just check the schedule before you submit.</p>
+
+<h3>Trades</h3>
+<p>You can trade locked players with other members anytime; the commissioner records it.</p>
+
+<h3>Hurt locked player</h3>
+<p>If your locked player gets hurt, you get to draft a replacement from the undrafted pool.</p>
+
+<h3>Test year</h3>
+<p>We're trying these rules out this season and they might get tweaked. If scoring changes, past weeks recalculate automatically so everything stays fair.</p>
+{% endblock %}

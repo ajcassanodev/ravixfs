@@ -11,7 +11,7 @@ ENV_FILE="/etc/ravixfs.env"
 
 echo "==> apt update + base packages"
 apt-get update -qq
-apt-get install -y -qq git python3 python3-venv sqlite3 ufw unattended-upgrades curl debian-keyring debian-archive-keyring apt-transport-https > /dev/null
+apt-get install -y -qq git python3 python3-venv sqlite3 ufw unattended-upgrades curl sudo debian-keyring debian-archive-keyring apt-transport-https > /dev/null
 
 echo "==> caddy (official repo)"
 if [ ! -f /usr/share/keyrings/caddy-stable-archive-keyring.gpg ]; then
@@ -65,6 +65,58 @@ systemctl enable --now ravixfs.service > /dev/null
 systemctl enable --now ravixfs-poll.timer > /dev/null
 systemctl enable --now ravixfs-sync.timer > /dev/null
 
+echo "==> staging instance (staging.ravixfs.com)"
+STAGING_DIR="/opt/ravixfs-staging"
+mkdir -p "$STAGING_DIR"
+chown "$APP_USER:$APP_USER" "$STAGING_DIR"
+if [ -d "$STAGING_DIR/.git" ]; then
+  sudo -u "$APP_USER" git -C "$STAGING_DIR" fetch --quiet origin || true
+else
+  sudo -u "$APP_USER" git clone --quiet "$REPO_URL" "$STAGING_DIR" || true
+fi
+# Track the remote staging branch if it exists; otherwise stay on main for now.
+if sudo -u "$APP_USER" git -C "$STAGING_DIR" show-ref --verify --quiet refs/remotes/origin/staging 2>/dev/null; then
+  sudo -u "$APP_USER" git -C "$STAGING_DIR" checkout -B staging --track origin/staging --quiet 2>/dev/null \
+    || sudo -u "$APP_USER" git -C "$STAGING_DIR" checkout --quiet staging
+  sudo -u "$APP_USER" git -C "$STAGING_DIR" merge --ff-only --quiet origin/staging || true
+  echo "(staging checkout now on origin/staging)"
+else
+  echo "(remote staging branch not found yet; staging instance mirrors main for now)"
+fi
+chown -R "$APP_USER:$APP_USER" "$STAGING_DIR"
+
+echo "==> staging python venv"
+if [ ! -d "$STAGING_DIR/venv" ]; then
+  sudo -u "$APP_USER" python3 -m venv "$STAGING_DIR/venv"
+fi
+sudo -u "$APP_USER" "$STAGING_DIR/venv/bin/pip" install -q -r "$STAGING_DIR/requirements.txt"
+
+echo "==> staging database"
+sudo -u "$APP_USER" RAVIXFS_DB="$STAGING_DIR/ravixfs.db" "$STAGING_DIR/venv/bin/python" \
+  -c "import sys; sys.path.insert(0, '$STAGING_DIR'); from app.db import init_db; init_db()"
+
+echo "==> staging systemd units"
+for unit in ravixfs-staging.service ravixfs-staging-poll.service ravixfs-staging-poll.timer ravixfs-staging-sync.service ravixfs-staging-sync.timer; do
+  cp "$APP_DIR/deploy/$unit" "/etc/systemd/system/$unit"
+done
+systemctl daemon-reload
+systemctl enable --now ravixfs-staging.service > /dev/null
+systemctl enable --now ravixfs-staging-poll.timer > /dev/null
+systemctl enable --now ravixfs-staging-sync.timer > /dev/null
+
+echo "==> backups"
+chmod +x "$APP_DIR/deploy/backup.sh"
+mkdir -p /opt/ravixfs/backups
+chown "$APP_USER:$APP_USER" /opt/ravixfs/backups
+cp "$APP_DIR/deploy/ravixfs-backup.service" "$APP_DIR/deploy/ravixfs-backup.timer" /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now ravixfs-backup.timer > /dev/null
+
+echo "==> sudoers (let the app user restart its own services after code sync)"
+printf '%s\n' "$APP_USER ALL=(ALL) NOPASSWD: /bin/systemctl restart ravixfs.service, /bin/systemctl restart ravixfs-staging.service" > /etc/sudoers.d/ravixfs
+chmod 440 /etc/sudoers.d/ravixfs
+visudo -c -q
+
 echo "==> caddy"
 cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.bak 2>/dev/null || true
 cp "$APP_DIR/deploy/Caddyfile" /etc/caddy/Caddyfile
@@ -82,6 +134,28 @@ echo 'APT::Periodic::Unattended-Upgrade "1";' >> /etc/apt/apt.conf.d/20auto-upgr
 
 echo "==> initial data pull (background)"
 systemctl start ravixfs-poll.service || true
+
+echo "==> ssh hardening (key-only)"
+# CRITICAL SAFETY RULE: only disable password auth if a root SSH key exists.
+# Otherwise we would lock the owner out of the server.
+if [ -s /root/.ssh/authorized_keys ]; then
+  mkdir -p /etc/ssh/sshd_config.d
+  printf 'PasswordAuthentication no\nPermitRootLogin prohibit-password\n' > /etc/ssh/sshd_config.d/99-ravixfs.conf
+  chmod 644 /etc/ssh/sshd_config.d/99-ravixfs.conf
+  if sshd -t; then
+    systemctl restart sshd
+    echo "(password SSH disabled; key-only from now on)"
+  else
+    echo "sshd config test FAILED; leaving password auth as-is" >&2
+    rm -f /etc/ssh/sshd_config.d/99-ravixfs.conf
+  fi
+else
+  echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+  echo "WARNING: /root/.ssh/authorized_keys is missing or empty."
+  echo "Skipping SSH hardening so you don't get locked out."
+  echo "Add an SSH key for root, then re-run this script."
+  echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+fi
 
 echo
 echo "DONE. Next steps:"

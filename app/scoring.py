@@ -58,19 +58,28 @@ def member_week_points(con, member_id: int, season: int, week: int):
 
 
 def standings(con, season: int, through_week: int | None = None):
-    """[(member_id, name, total)] sorted desc. Sums every completed week."""
-    members = con.execute("SELECT id, name FROM members ORDER BY name").fetchall()
+    """([(member_id, name, total)], [(member_id, name, total)]) sorted desc.
+
+    Returns (real_table, test_table): test members (is_test=1) are excluded
+    from the real standings and returned separately so the homepage can show
+    them in a small "excluded" section.
+    """
+    members = con.execute(
+        "SELECT id, name, COALESCE(is_test, 0) AS is_test FROM members ORDER BY name"
+    ).fetchall()
     if through_week is None:
         wrow = con.execute(
             "SELECT MAX(week) AS w FROM weekly_stats WHERE season = ?", (season,)
         ).fetchone()
         through_week = wrow["w"] or 0
-    table = []
+    table, test_table = [], []
     for m in members:
         total = 0.0
         for week in range(1, through_week + 1):
             pts, _ = member_week_points(con, m["id"], season, week)
             total += pts
-        table.append((m["id"], m["name"], round(total, 2)))
+        (test_table if m["is_test"] else table).append(
+            (m["id"], m["name"], round(total, 2)))
     table.sort(key=lambda r: r[2], reverse=True)
-    return table
+    test_table.sort(key=lambda r: r[2], reverse=True)
+    return table, test_table

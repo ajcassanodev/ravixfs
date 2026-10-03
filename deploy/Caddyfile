@@ -5,3 +5,7 @@ ravixfs.com {
 www.ravixfs.com {
 	redir https://ravixfs.com{uri} permanent
 }
+
+staging.ravixfs.com {
+	reverse_proxy localhost:8001
+}

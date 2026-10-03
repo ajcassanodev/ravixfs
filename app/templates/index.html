@@ -8,6 +8,15 @@
   <tr><td>{{ loop.index }}</td><td>{{ name }}</td><td><strong>{{ "%.1f"|format(total) }}</strong></td></tr>
   {% endfor %}
 </table>
+{% if test_table %}
+<h3>Test members <small>(excluded from standings)</small></h3>
+<table>
+  <tr><th>Member</th><th>Points</th></tr>
+  {% for mid, name, total in test_table %}
+  <tr><td>{{ name }}</td><td>{{ "%.1f"|format(total) }}</td></tr>
+  {% endfor %}
+</table>
+{% endif %}
 <h3>Weeks</h3>
 <p>
 {% for w in range(1, through_week + 1) %}
