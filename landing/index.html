@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ravix Fantasy Sports</title>
+<meta name="description" content="Ravix Fantasy Sports — home of the Pick5 games. Simple rules, live scoring, real competition.">
+<link rel="icon" href="assets/logo.jpg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0c11;
+    --bg2:#10141c;
+    --card:#131824;
+    --line:rgba(120,180,220,.14);
+    --cyan:#45c2ff;
+    --cyan-dim:rgba(69,194,255,.12);
+    --red:#ff4d5e;
+    --text:#eef3f8;
+    --muted:#9aa7b8;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    -webkit-font-smoothing:antialiased;
+  }
+  body::before{
+    content:"";
+    position:fixed;
+    inset:0;
+    pointer-events:none;
+    background:
+      radial-gradient(900px 480px at 50% -80px, rgba(69,194,255,.10), transparent 65%),
+      radial-gradient(700px 420px at 85% 110%, rgba(69,194,255,.05), transparent 60%);
+  }
+  .wrap{width:100%;max-width:1080px;margin:0 auto;padding:0 24px;position:relative;z-index:1}
+
+  /* Header */
+  header{padding:28px 0}
+  .brand{display:flex;align-items:center;gap:16px}
+  .brand img{
+    width:56px;height:56px;border-radius:14px;object-fit:cover;
+    box-shadow:0 0 0 1px var(--line), 0 8px 28px rgba(0,0,0,.5);
+  }
+  .brand h1{
+    font-family:'Space Grotesk',sans-serif;
+    font-size:clamp(20px,3.4vw,28px);
+    font-weight:700;letter-spacing:.14em;
+  }
+  .brand h1 span{color:var(--cyan)}
+
+  /* Hero */
+  .hero{text-align:center;padding:72px 0 56px;animation:rise .7s ease both}
+  .hero .logo-big{
+    width:132px;height:132px;border-radius:30px;object-fit:cover;margin:0 auto 28px;display:block;
+    box-shadow:0 0 0 1px var(--line), 0 24px 70px rgba(0,0,0,.6), 0 0 70px rgba(69,194,255,.12);
+  }
+  .hero h2{
+    font-family:'Space Grotesk',sans-serif;
+    font-size:clamp(34px,6vw,58px);
+    font-weight:700;line-height:1.08;letter-spacing:-.01em;
+    max-width:760px;margin:0 auto 18px;
+  }
+  .hero h2 .accent{color:var(--cyan)}
+  .hero p{
+    color:var(--muted);font-size:clamp(16px,2.4vw,19px);line-height:1.65;
+    max-width:620px;margin:0 auto;
+  }
+
+  /* Games */
+  .games{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));
+    gap:22px;padding:16px 0 84px;
+  }
+  .card{
+    background:linear-gradient(180deg,var(--card),var(--bg2));
+    border:1px solid var(--line);border-radius:20px;
+    padding:30px 28px;
+    display:flex;flex-direction:column;gap:14px;
+    transition:transform .25s ease, border-color .25s ease, box-shadow .25s ease;
+    animation:rise .7s ease both;
+  }
+  .card:nth-child(2){animation-delay:.12s}
+  .card.live:hover{
+    transform:translateY(-4px);
+    border-color:rgba(69,194,255,.45);
+    box-shadow:0 18px 50px rgba(0,0,0,.5), 0 0 40px rgba(69,194,255,.08);
+  }
+  .badge{
+    align-self:flex-start;
+    font-size:12px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;
+    padding:6px 12px;border-radius:999px;
+  }
+  .badge.live{color:#0a0c11;background:var(--cyan)}
+  .badge.live::before{
+    content:"";display:inline-block;width:7px;height:7px;border-radius:50%;
+    background:#0a0c11;margin-right:7px;animation:pulse 1.6s infinite;
+  }
+  .badge.soon{color:var(--muted);border:1px solid var(--line);background:rgba(255,255,255,.02)}
+  .card h3{font-family:'Space Grotesk',sans-serif;font-size:24px;font-weight:600}
+  .card p{color:var(--muted);font-size:15px;line-height:1.65;flex:1}
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:16px;
+    padding:14px 26px;border-radius:12px;text-decoration:none;
+    transition:transform .15s ease, box-shadow .2s ease, background .2s ease;
+  }
+  .btn-primary{background:var(--cyan);color:#0a0c11}
+  .btn-primary:hover{background:#6fd0ff;box-shadow:0 10px 30px rgba(69,194,255,.35);transform:translateY(-1px)}
+  .btn-disabled{background:rgba(255,255,255,.05);color:var(--muted);border:1px solid var(--line);cursor:default}
+
+  footer{
+    margin-top:auto;padding:28px 0 36px;
+    border-top:1px solid var(--line);
+    color:var(--muted);font-size:13px;
+    display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  }
+
+  @keyframes rise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  @media (max-width:560px){
+    .hero{padding:48px 0 40px}
+    .brand img{width:46px;height:46px}
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <img src="assets/logo.jpg" alt="Ravix logo">
+        <h1>RAVIX <span>FANTASY SPORTS</span></h1>
+      </div>
+    </header>
+
+    <section class="hero">
+      <img class="logo-big" src="assets/logo.jpg" alt="Ravix logo">
+      <h2>Fantasy sports, built for <span class="accent">competitors.</span></h2>
+      <p>Ravix is home to the Pick5 games &mdash; simple rules, live scoring, and leagues where every week matters.</p>
+    </section>
+
+    <section class="games">
+      <div class="card live">
+        <span class="badge live">Live now</span>
+        <h3>NFL Defensive Pick5</h3>
+        <p>Draft one defensive star to anchor your season, then pick four fresh defenders every week. Sacks, interceptions, forced fumbles &mdash; defense finally gets its own fantasy game.</p>
+        <a class="btn btn-primary" href="https://prod-pick5f.ravixfs.com">Enter the game &rarr;</a>
+      </div>
+      <div class="card">
+        <span class="badge soon">Coming 2027</span>
+        <h3>Baseball Pick5</h3>
+        <p>The original. Five hitters, weekly picks, season-long rivalries &mdash; returning with an expanded league and bigger prizes for the 2027 season.</p>
+        <span class="btn btn-disabled">Coming soon</span>
+      </div>
+    </section>
+  </div>
+
+  <footer>
+    <div class="wrap" style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap">
+      <span>&copy; 2026 Ravix Fantasy Sports</span>
+      <span>Pick5 &mdash; pick five, win it all.</span>
+    </div>
+  </footer>
+</body>
+</html>

@@ -1,4 +1,9 @@
-ravixfs.com, prod-pick5f.ravixfs.com {
+ravixfs.com {
+	root * /opt/ravixfs/landing
+	file_server
+}
+
+prod-pick5f.ravixfs.com {
 	reverse_proxy localhost:8000
 }
 
