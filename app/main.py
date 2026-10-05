@@ -368,3 +368,226 @@ def admin_scoring(token: str, stat_key: str = Form(""), points: float = Form(0))
     con.commit()
     con.close()
     return RedirectResponse(f"/admin/{token}", status_code=303)
+
+
+# ---------------- projections + pick-from-report ----------------
+
+PROJ_SORTS = {
+    "proj": (lambda d: d["proj_pts"], True),
+    "player": (lambda d: d["name"].lower(), False),
+    "team": (lambda d: d["team"], False),
+    "pos": (lambda d: d["position"], False),
+    "tkl": (lambda d: d["avg"]["tkl"], True),
+    "sack": (lambda d: d["avg"]["sacks"], True),
+    "ff": (lambda d: d["avg"]["ff"], True),
+    "fr": (lambda d: d["avg"]["fr"], True),
+    "int": (lambda d: d["avg"]["ints"], True),
+    "td": (lambda d: d["avg"]["tds"], True),
+    "season": (lambda d: d["season_pts"], True),
+}
+
+
+def _ko_started(ko_iso):
+    if not ko_iso:
+        return False
+    ko = datetime.fromisoformat(ko_iso)
+    if ko.tzinfo is None:
+        ko = ko.replace(tzinfo=timezone.utc)
+    return ko <= datetime.now(timezone.utc)
+
+
+def _projections_context(con, request, token="", sort="proj", dir="",
+                         pos="", q=""):
+    season = _db.current_season(con)
+    week = _db.current_pick_week(con, season)
+    through = week - 1
+    member = None
+    if token:
+        member = con.execute("SELECT * FROM members WHERE pick_token = ?",
+                             (token,)).fetchone()
+    rows, locked, picks, locked_ids, picked_ids = [], None, [], set(), set()
+    if through >= 1:
+        rows = scoring.projections(con, season, through)
+        if pos in ("DB", "DL", "LB"):
+            rows = [r for r in rows if r["position_group"] == pos]
+        if q:
+            ql = q.lower()
+            rows = [r for r in rows if ql in r["name"].lower()]
+        keyfn, default_desc = PROJ_SORTS.get(sort, PROJ_SORTS["proj"])
+        desc = (dir == "desc") if dir in ("asc", "desc") else default_desc
+        rows.sort(key=keyfn, reverse=desc)
+    if member:
+        locked = _db.member_locked_player(con, member["id"], season)
+        locked_ids = _db.locked_player_ids(con, season)
+        picks = con.execute(
+            "SELECT wp.player_id, p.name, p.team FROM weekly_picks wp "
+            "JOIN players p ON p.player_id = wp.player_id "
+            "WHERE wp.member_id = ? AND wp.season = ? AND wp.week = ?",
+            (member["id"], season, week)).fetchall()
+        picked_ids = {p["player_id"] for p in picks}
+    kos = {r["home_team"]: r["kickoff_utc"] for r in con.execute(
+        "SELECT home_team, kickoff_utc FROM games WHERE season=? AND week=?",
+        (season, week))}
+    kos.update({r["away_team"]: r["kickoff_utc"] for r in con.execute(
+        "SELECT away_team, kickoff_utc FROM games WHERE season=? AND week=?",
+        (season, week))})
+    # per-row pick state for the template
+    for r in rows:
+        pid = r["player_id"]
+        if pid in locked_ids:
+            r["state"] = "locked"
+        elif pid in picked_ids:
+            r["state"] = "picked"
+        else:
+            ko = kos.get(r["team"])
+            if ko and _ko_started(ko):
+                r["state"] = "started"
+            elif not ko:
+                r["state"] = "bye"
+            else:
+                r["state"] = "open"
+    pick_kos = []
+    for p in picks:
+        ko = _db.player_kickoff(con, p["player_id"], season, week)
+        pick_kos.append({"name": p["name"], "team": p["team"],
+                         "player_id": p["player_id"],
+                         "started": _ko_started(ko) if ko else False})
+    return {
+        "season": season, "week": week, "through": through,
+        "rows": rows, "member": member, "locked": locked,
+        "picks": pick_kos, "locked_ids": locked_ids,
+        "scoring": scoring.scoring_map(con),
+        "sort": sort if sort in PROJ_SORTS else "proj",
+        "dir": dir if dir in ("asc", "desc") else "",
+        "pos": pos, "q": q, "token": token,
+        "sort_links": _sort_links(token, sort, dir, pos, q),
+    }
+
+
+@app.get("/projections", response_class=HTMLResponse)
+def projections_page(request: Request, token: str = "", sort: str = "proj",
+                     dir: str = "", pos: str = "", q: str = ""):
+    con = _db.connect()
+    ctx = _projections_context(con, request, token, sort, dir, pos, q)
+    con.close()
+    return templates.TemplateResponse(request, "projections.html", {
+        "request": request, **ctx,
+        "notice": request.query_params.get("notice", ""),
+    })
+
+
+SORT_LABELS = [
+    ("player", "Player"), ("team", "Team"), ("pos", "Pos"), ("proj", "Proj"),
+    ("tkl", "Tkl/g"), ("sack", "Sack/g"), ("ff", "FF/g"), ("fr", "FR/g"),
+    ("int", "INT/g"), ("td", "TD/g"), ("season", "Season"),
+]
+
+
+def _sort_links(token, sort, dir, pos, q):
+    from urllib.parse import urlencode
+    links = []
+    for key, label in SORT_LABELS:
+        _, default_desc = PROJ_SORTS[key]
+        cur = dir if dir in ("asc", "desc") else ("desc" if default_desc else "asc")
+        if sort == key:
+            ndir = "asc" if cur == "desc" else "desc"
+            arrow, active = (" ▼" if cur == "desc" else " ▲"), True
+        else:
+            ndir, arrow, active = ("desc" if default_desc else "asc"), "", False
+        params = {"token": token, "sort": key, "dir": ndir,
+                  "pos": pos, "q": q}
+        links.append({"label": label, "url": "/projections?" + urlencode(params),
+                      "arrow": arrow, "active": active})
+    return links
+
+
+def _proj_redirect(token, sort, dir, pos, q, notice=""):
+    from urllib.parse import urlencode
+    params = {"token": token, "sort": sort, "dir": dir,
+              "pos": pos, "q": q}
+    if notice:
+        params["notice"] = notice
+    return RedirectResponse("/projections?" + urlencode(params),
+                            status_code=303)
+
+
+@app.post("/projections/pick", response_class=HTMLResponse)
+def projections_pick(request: Request, token: str = Form(""),
+                     player_id: str = Form(""), sort: str = Form("proj"),
+                     dir: str = Form(""), pos: str = Form(""),
+                     q: str = Form("")):
+    con = _db.connect()
+    m = con.execute("SELECT * FROM members WHERE pick_token = ?",
+                    (token,)).fetchone()
+    if not m:
+        con.close()
+        raise HTTPException(404, "bad pick link")
+    season = _db.current_season(con)
+    week = _db.current_pick_week(con, season)
+    prow = con.execute(
+        "SELECT * FROM players WHERE player_id = ? "
+        "AND position_group IN ('DB','DL','LB')", (player_id,)).fetchone()
+    err = None
+    if not prow:
+        err = "player not found"
+    elif prow["player_id"] in _db.locked_player_ids(con, season):
+        err = f"{prow['name']} is someone's locked player"
+    else:
+        existing = con.execute(
+            "SELECT player_id FROM weekly_picks WHERE member_id=? AND season=? AND week=?",
+            (m["id"], season, week)).fetchall()
+        have = {r["player_id"] for r in existing}
+        if prow["player_id"] in have:
+            err = f"{prow['name']} is already one of your picks"
+        elif len(have) >= 4:
+            err = "you already have 4 picks (remove one first)"
+        else:
+            ko = _db.player_kickoff(con, prow["player_id"], season, week)
+            if ko and _ko_started(ko):
+                err = f"{prow['name']}'s game already started"
+    if err:
+        con.close()
+        return _proj_redirect(token, sort, dir, pos, q, notice="err:" + err)
+    con.execute(
+        "INSERT INTO weekly_picks (member_id, player_id, season, week, submitted_at) "
+        "VALUES (?,?,?,?,?)",
+        (m["id"], prow["player_id"], season, week, _db.utcnow_iso()))
+    con.commit()
+    con.close()
+    return _proj_redirect(token, sort, dir, pos, q,
+                          notice="ok:picked " + prow["name"])
+
+
+@app.post("/projections/unpick", response_class=HTMLResponse)
+def projections_unpick(request: Request, token: str = Form(""),
+                       player_id: str = Form(""), sort: str = Form("proj"),
+                       dir: str = Form(""), pos: str = Form(""),
+                       q: str = Form("")):
+    con = _db.connect()
+    m = con.execute("SELECT * FROM members WHERE pick_token = ?",
+                    (token,)).fetchone()
+    if not m:
+        con.close()
+        raise HTTPException(404, "bad pick link")
+    season = _db.current_season(con)
+    week = _db.current_pick_week(con, season)
+    row = con.execute(
+        "SELECT wp.player_id, p.name FROM weekly_picks wp "
+        "JOIN players p ON p.player_id = wp.player_id "
+        "WHERE wp.member_id=? AND wp.season=? AND wp.week=? AND wp.player_id=?",
+        (m["id"], season, week, player_id)).fetchone()
+    if not row:
+        con.close()
+        return _proj_redirect(token, sort, dir, pos, q)
+    ko = _db.player_kickoff(con, player_id, season, week)
+    if ko and _ko_started(ko):
+        con.close()
+        return _proj_redirect(token, sort, dir, pos, q,
+                              notice="err:game already started -- pick is locked in")
+    con.execute(
+        "DELETE FROM weekly_picks WHERE member_id=? AND season=? AND week=? AND player_id=?",
+        (m["id"], season, week, player_id))
+    con.commit()
+    con.close()
+    return _proj_redirect(token, sort, dir, pos, q,
+                          notice="ok:removed " + row["name"])
