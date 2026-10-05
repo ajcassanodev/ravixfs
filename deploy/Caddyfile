@@ -1,4 +1,4 @@
-ravixfs.com {
+ravixfs.com, prod-pick5f.ravixfs.com {
 	reverse_proxy localhost:8000
 }
 
