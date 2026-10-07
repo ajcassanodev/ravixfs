@@ -76,7 +76,7 @@
   </tr>
   {% for r in rows %}
   <tr{% if loop.index0 < 25 %} class="top25"{% endif %}>
-    <td>{{ r.name }}</td>
+    <td><button type="button" class="plink" data-pid="{{ r.player_id }}">{{ r.name }}</button></td>
     <td>{{ r.team }}</td>
     <td>{{ r.position }}</td>
     <td><strong>{{ "%.2f"|format(r.proj_pts) }}</strong></td>
@@ -113,4 +113,56 @@
 (tkl {{ scoring.tackles }}, sack {{ scoring.sacks }}, FF {{ scoring.forced_fumbles }}, FR {{ scoring.fumble_recoveries }}, INT {{ scoring.interceptions }}, safety {{ scoring.safeties }}, def TD {{ scoring.def_tds }}).
 Averages don't know matchups or game script — scouts, not gospel. Each pick locks at its own game's kickoff.</p>
 {% endif %}
+
+<!-- Player popup card -->
+<div id="pcard-overlay" class="pcard-overlay" hidden>
+  <div class="pcard" role="dialog" aria-modal="true">
+    <button type="button" class="pcard-close" aria-label="Close">&times;</button>
+    <div id="pcard-body"><p class="note">Loading…</p></div>
+  </div>
+</div>
+<script>
+(function(){
+  var overlay = document.getElementById('pcard-overlay');
+  var body = document.getElementById('pcard-body');
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function close(){ overlay.hidden = true; }
+  overlay.addEventListener('click', function(e){ if (e.target === overlay) close(); });
+  overlay.querySelector('.pcard-close').addEventListener('click', close);
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape') close(); });
+  document.querySelectorAll('.plink').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var pid = btn.getAttribute('data-pid');
+      overlay.hidden = false;
+      body.innerHTML = '<p class="note">Loading…</p>';
+      fetch('/player/' + encodeURIComponent(pid) + '.json')
+        .then(function(r){ if(!r.ok) throw new Error('no data'); return r.json(); })
+        .then(function(d){
+          var html = '<h3>' + esc(d.name) + '</h3>'
+            + '<p class="note">' + esc(d.position || '') + (d.position_group ? ' · ' + esc(d.position_group) : '')
+            + ' · ' + esc(d.team || '') + '</p>';
+          (d.warnings || []).forEach(function(w){
+            html += '<p class="' + (w.kind === 'bye' ? 'warn' : 'err') + '">⚠ ' + esc(w.text) + '</p>';
+          });
+          if ((d.weeks || []).length) {
+            html += '<h4>Game stats by week</h4><table><tr><th>Wk</th><th>Tkl</th><th>Sack</th>'
+              + '<th>FF</th><th>FR</th><th>INT</th><th>Sfty</th><th>TD</th><th>Pts</th></tr>';
+            d.weeks.forEach(function(wk){
+              var s = wk.stats;
+              html += '<tr><td>' + wk.week + '</td><td>' + s.tackles + '</td><td>' + s.sacks
+                + '</td><td>' + s.forced_fumbles + '</td><td>' + s.fumble_recoveries
+                + '</td><td>' + s.interceptions + '</td><td>' + s.safeties
+                + '</td><td>' + s.def_tds + '</td><td><strong>' + wk.points + '</strong></td></tr>';
+            });
+            html += '</table>';
+          } else {
+            html += '<p class="note">No game stats yet this season.</p>';
+          }
+          body.innerHTML = html;
+        })
+        .catch(function(){ body.innerHTML = '<p class="err">Could not load player data.</p>'; });
+    });
+  });
+})();
+</script>
 {% endblock %}

@@ -570,6 +570,47 @@ SORT_LABELS = [
 ]
 
 
+@app.get("/player/{player_id}.json")
+def player_card(player_id: str):
+    """Player popup data: info, injury/bye warnings, per-week game stats."""
+    con = _db.connect()
+    season = _db.current_season(con)
+    p = con.execute(
+        "SELECT player_id, name, team, position, position_group, status "
+        "FROM players WHERE player_id = ?", (player_id,)
+    ).fetchone()
+    if not p:
+        con.close()
+        raise HTTPException(status_code=404, detail="unknown player")
+    status = (p["status"] or "").upper()
+    warnings = []
+    if status and status != "ACT":
+        label = {"RES": "On reserve (IR/out)", "INA": "Inactive"}.get(status, status)
+        warnings.append({"kind": "injury", "text": label})
+    # Bye weeks: weeks 1-18 where the player's team has no scheduled game.
+    team_weeks = {r["week"] for r in con.execute(
+        "SELECT week FROM games WHERE season = ? AND (home_team = ? OR away_team = ?)",
+        (season, p["team"], p["team"])).fetchall()}
+    cur_pick = _db.current_pick_week(con, season)
+    byes = [w for w in range(1, 19) if w not in team_weeks and w >= cur_pick]
+    for w in byes:
+        warnings.append({"kind": "bye", "text": f"Bye week {w}"})
+    cfg = scoring.scoring_map(con)
+    weeks = []
+    for r in con.execute(
+        "SELECT * FROM weekly_stats WHERE player_id = ? AND season = ? ORDER BY week",
+        (player_id, season)).fetchall():
+        stats = {k: (r[k] or 0) for k in scoring.STAT_KEYS}
+        pts = sum(stats[k] * cfg.get(k, 0) for k in scoring.STAT_KEYS)
+        weeks.append({"week": r["week"], "stats": stats, "points": round(pts, 1)})
+    con.close()
+    return JSONResponse({
+        "player_id": p["player_id"], "name": p["name"], "team": p["team"],
+        "position": p["position"], "position_group": p["position_group"],
+        "status": p["status"], "warnings": warnings, "weeks": weeks,
+    })
+
+
 def _sort_links(token, sort, dir, pos, q):
     from urllib.parse import urlencode
     links = []
