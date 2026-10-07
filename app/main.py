@@ -338,10 +338,11 @@ def admin_home(request: Request, token: str):
     season = _db.current_season(con)
     members = con.execute("SELECT * FROM members ORDER BY name").fetchall()
     cfg = con.execute("SELECT * FROM scoring_config").fetchall()
+    ticker = _ticker_data(con, season, include_test=_is_staging_host(request.headers.get("host", "")))
     con.close()
     return templates.TemplateResponse(request, "admin.html", {
         "request": request, "token": token, "season": season,
-        "members": members, "scoring": cfg,
+        "members": members, "scoring": cfg, "ticker": ticker,
     })
 
 

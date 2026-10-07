@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Admin{% endblock %}
+{% block ticker %}{% include "_ticker.html" %}{% endblock %}
 {% block content %}
 <h2>Commissioner Admin</h2>
 
@@ -58,3 +59,4 @@
 
 <datalist id="allp"></datalist>
 {% endblock %}
+{% block scripts %}{% include "_ticker_scripts.html" %}{% endblock %}
