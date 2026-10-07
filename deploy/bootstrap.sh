@@ -107,8 +107,11 @@ sudo -u "$APP_USER" RAVIXFS_DB="$STAGING_DIR/ravixfs.db" "$STAGING_DIR/venv/bin/
   -c "import sys; sys.path.insert(0, '$STAGING_DIR'); from app.db import init_db; init_db()"
 
 echo "==> staging systemd units"
+# NOTE: staging units come from the staging-branch checkout, not $APP_DIR
+# (main) — the staging branch carries the shared-identity env vars
+# (SHARED_MEMBER_DB, RAVIX_ENV) that main's copies lack.
 for unit in ravixfs-staging.service ravixfs-staging-poll.service ravixfs-staging-poll.timer ravixfs-staging-sync.service ravixfs-staging-sync.timer; do
-  cp "$APP_DIR/deploy/$unit" "/etc/systemd/system/$unit"
+  cp "$STAGING_DIR/deploy/$unit" "/etc/systemd/system/$unit"
 done
 systemctl daemon-reload
 systemctl enable --now ravixfs-staging.service > /dev/null
@@ -175,6 +178,12 @@ visudo -c -q
 echo "==> caddy"
 cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.bak 2>/dev/null || true
 cp "$APP_DIR/deploy/Caddyfile" /etc/caddy/Caddyfile
+# The pool subdomain block lives only on the staging-pool branch; main's
+# Caddyfile doesn't have it, and the branch Caddyfile lacks the landing
+# page — so add the block idempotently instead of copying either file.
+if ! grep -q "staging-footballpool.ravixfs.com" /etc/caddy/Caddyfile 2>/dev/null; then
+  printf '\nstaging-footballpool.ravixfs.com {\n\treverse_proxy localhost:8002\n}\n' >> /etc/caddy/Caddyfile
+fi
 systemctl reload caddy
 
 echo "==> firewall"
