@@ -8,6 +8,8 @@ Group=ravixfs
 WorkingDirectory=/opt/ravixfs-staging
 EnvironmentFile=/etc/ravixfs.env
 Environment=RAVIXFS_DB=/opt/ravixfs-staging/ravixfs.db
+Environment=SHARED_MEMBER_DB=/opt/ravixfs-shared-staging/shared.db
+Environment=RAVIX_ENV=staging
 ExecStart=/opt/ravixfs-staging/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8001
 Restart=always
 RestartSec=5

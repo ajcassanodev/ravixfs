@@ -10,6 +10,7 @@ from fastapi.templating import Jinja2Templates
 
 from . import db as _db
 from . import scoring
+from shared import identity as _identity
 
 ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "")
 BASE = os.path.dirname(__file__)
@@ -17,6 +18,39 @@ BASE = os.path.dirname(__file__)
 app = FastAPI(title="ravixfs")
 app.mount("/static", StaticFiles(directory=os.path.join(BASE, "static")), name="static")
 templates = Jinja2Templates(directory=os.path.join(BASE, "templates"))
+
+
+@app.on_event("startup")
+def _init_shared_identity():
+    # Idempotent; no-op when SHARED_MEMBER_DB is not configured.
+    # Part of the cross-game member identity (docs/shared-identity.md).
+    try:
+        _identity.init_shared_db()
+    except Exception:
+        pass
+
+
+def _establish_session(response, request, member_row) -> None:
+    """Shared cross-subdomain session: opening a pick link signs the member
+    in on every Ravix subdomain. Adopts the member into the shared store
+    (preserving their pick token) when needed. No-op when unconfigured.
+    Never raises."""
+    try:
+        con = _identity.connect_shared()
+        if con is None:
+            return
+        try:
+            m = _identity.import_member(
+                con, member_row["name"], member_row["pick_token"],
+                bool(member_row["is_test"]),
+            )
+            _identity.ensure_membership(con, m["id"], "pick5f")
+            shared_id = m["id"]
+        finally:
+            con.close()
+        _identity.set_session_cookie(response, request, shared_id)
+    except Exception:
+        pass
 
 
 def _admin_ok(token: str) -> bool:
@@ -242,12 +276,24 @@ def submit_form(request: Request, token: str):
         (m["id"], season, week),
     ).fetchall()
     con.close()
-    return templates.TemplateResponse(request, "submit.html", {
+    resp = templates.TemplateResponse(request, "submit.html", {
         "request": request, "member": m, "season": season, "week": week,
         "locked": locked, "players": players, "locked_names": locked_names,
         "kickoffs": kos, "now": now,
         "existing": [e["name"] for e in existing], "errors": [], "token": token,
     })
+    _establish_session(resp, request, m)
+    return resp
+
+
+@app.get("/pick", response_class=HTMLResponse)
+def pick_redirect(request: Request):
+    """Cross-game entry point: resolve the shared Ravix session to this
+    member's Pick5 pick link. Additive only -- existing links untouched."""
+    m = _identity.session_member(request)
+    if not m:
+        raise HTTPException(404, "no Ravix session -- open your pick link first")
+    return RedirectResponse(f"/submit/{m['pick_token']}", status_code=302)
 
 
 @app.post("/submit/{token}", response_class=HTMLResponse)
