@@ -52,6 +52,17 @@ else
   echo "(env file exists, keeping existing admin token)"
 fi
 
+echo "==> env file (session secrets for cross-subdomain sign-in)"
+for var in SESSION_SECRET_STAGING SESSION_SECRET_PROD; do
+  if ! grep -q "^$var=" "$ENV_FILE" 2>/dev/null; then
+    printf '%s=%s\n' "$var" "$(openssl rand -hex 32)" >> "$ENV_FILE"
+    echo "(generated $var)"
+  else
+    echo "($var exists, keeping)"
+  fi
+done
+chmod 600 "$ENV_FILE"
+
 echo "==> database"
 sudo -u "$APP_USER" RAVIXFS_DB="$APP_DIR/ravixfs.db" "$APP_DIR/venv/bin/python" \
   -c "import sys; sys.path.insert(0, '$APP_DIR'); from app.db import init_db; init_db()"
@@ -104,6 +115,50 @@ systemctl enable --now ravixfs-staging.service > /dev/null
 systemctl enable --now ravixfs-staging-poll.timer > /dev/null
 systemctl enable --now ravixfs-staging-sync.timer > /dev/null
 
+echo "==> pool staging instance (staging-footballpool.ravixfs.com)"
+POOL_STAGING_DIR="/opt/ravixfs-pool-staging"
+SHARED_STAGING_DIR="/opt/ravixfs-shared-staging"
+mkdir -p "$POOL_STAGING_DIR" "$SHARED_STAGING_DIR"
+chown "$APP_USER:$APP_USER" "$POOL_STAGING_DIR" "$SHARED_STAGING_DIR"
+if [ -d "$POOL_STAGING_DIR/.git" ]; then
+  sudo -u "$APP_USER" git -C "$POOL_STAGING_DIR" fetch --quiet origin || true
+else
+  sudo -u "$APP_USER" git clone --quiet "$REPO_URL" "$POOL_STAGING_DIR" || true
+fi
+if sudo -u "$APP_USER" git -C "$POOL_STAGING_DIR" show-ref --verify --quiet refs/remotes/origin/staging-pool 2>/dev/null; then
+  sudo -u "$APP_USER" git -C "$POOL_STAGING_DIR" checkout -B staging-pool --track origin/staging-pool --quiet 2>/dev/null \
+    || sudo -u "$APP_USER" git -C "$POOL_STAGING_DIR" checkout --quiet staging-pool
+  sudo -u "$APP_USER" git -C "$POOL_STAGING_DIR" merge --ff-only --quiet origin/staging-pool || true
+  echo "(pool staging checkout now on origin/staging-pool)"
+else
+  echo "(remote staging-pool branch not found yet; push it first, then re-run)"
+fi
+chown -R "$APP_USER:$APP_USER" "$POOL_STAGING_DIR"
+
+echo "==> pool staging python venv"
+if [ ! -d "$POOL_STAGING_DIR/venv" ]; then
+  sudo -u "$APP_USER" python3 -m venv "$POOL_STAGING_DIR/venv"
+fi
+sudo -u "$APP_USER" "$POOL_STAGING_DIR/venv/bin/pip" install -q -r "$POOL_STAGING_DIR/requirements.txt"
+
+echo "==> pool staging database + shared member store"
+sudo -u "$APP_USER" POOL_DB="$POOL_STAGING_DIR/pool.db" "$POOL_STAGING_DIR/venv/bin/python" \
+  -c "import sys; sys.path.insert(0, '$POOL_STAGING_DIR'); from pool.db import init_db; init_db()"
+sudo -u "$APP_USER" SHARED_MEMBER_DB="$SHARED_STAGING_DIR/shared.db" "$POOL_STAGING_DIR/venv/bin/python" \
+  -c "import sys; sys.path.insert(0, '$POOL_STAGING_DIR'); from shared.identity import init_shared_db; init_shared_db()"
+
+echo "==> pool staging systemd units"
+for unit in ravixfs-pool-staging.service ravixfs-pool-staging-sync.service ravixfs-pool-staging-sync.timer ravixfs-pool-poll-staging.service ravixfs-pool-poll-staging.timer; do
+  cp "$POOL_STAGING_DIR/deploy/$unit" "/etc/systemd/system/$unit"
+done
+systemctl daemon-reload
+systemctl enable --now ravixfs-pool-staging.service > /dev/null
+systemctl enable --now ravixfs-pool-poll-staging.timer > /dev/null
+systemctl enable --now ravixfs-pool-staging-sync.timer > /dev/null
+
+echo "==> initial pool data pull (background)"
+systemctl start ravixfs-pool-poll-staging.service || true
+
 echo "==> backups"
 chmod +x "$APP_DIR/deploy/backup.sh"
 mkdir -p /opt/ravixfs/backups
@@ -113,7 +168,7 @@ systemctl daemon-reload
 systemctl enable --now ravixfs-backup.timer > /dev/null
 
 echo "==> sudoers (let the app user restart its own services after code sync)"
-printf '%s\n' "$APP_USER ALL=(ALL) NOPASSWD: /bin/systemctl restart ravixfs.service, /bin/systemctl restart ravixfs-staging.service" > /etc/sudoers.d/ravixfs
+printf '%s\n' "$APP_USER ALL=(ALL) NOPASSWD: /bin/systemctl restart ravixfs.service, /bin/systemctl restart ravixfs-staging.service, /bin/systemctl restart ravixfs-pool-staging.service" > /etc/sudoers.d/ravixfs
 chmod 440 /etc/sudoers.d/ravixfs
 visudo -c -q
 

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}ravixfs{% endblock %} · Ravix Football Pool</title>
+<link rel="icon" href="/static/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+<style>
+.game-row{display:flex;align-items:center;gap:12px;padding:.7rem .9rem;border:1px solid var(--line);
+  border-radius:10px;margin-bottom:.55rem;background:var(--card);flex-wrap:wrap}
+.game-row .teams{font-weight:600}
+.game-row .ko{margin-left:auto;color:var(--muted);font-size:.85rem}
+.game-row .score{font-variant-numeric:tabular-nums;font-weight:700;color:var(--cyan)}
+.game-row.locked{opacity:.75}
+.pick-opts{display:flex;gap:8px}
+.pick-opts label{display:flex;align-items:center;gap:6px;padding:.45rem .8rem;border:1px solid var(--line);
+  border-radius:8px;cursor:pointer;font-weight:600}
+.pick-opts input{accent-color:var(--cyan)}
+.pick-opts label.sel{border-color:var(--cyan);background:var(--cyan-dim)}
+.badge{font-size:.72rem;font-weight:700;letter-spacing:.08em;padding:.2rem .55rem;border-radius:6px;
+  text-transform:uppercase}
+.badge.lock{color:var(--gold);background:rgba(245,196,81,.12)}
+.badge.final{color:var(--green);background:rgba(74,222,128,.12)}
+.badge.open{color:var(--cyan);background:var(--cyan-dim)}
+table.standings{width:100%;border-collapse:collapse;margin-top:.8rem}
+table.standings th,table.standings td{padding:.55rem .7rem;text-align:left;border-bottom:1px solid var(--line)}
+table.standings th{color:var(--muted);font-size:.8rem;text-transform:uppercase;letter-spacing:.06em}
+table.standings td.num,table.standings th.num{text-align:right;font-variant-numeric:tabular-nums}
+tr.top1 td:first-child{color:var(--gold);font-weight:700}
+tr.top2 td:first-child{color:var(--silver);font-weight:700}
+tr.top3 td:first-child{color:var(--bronze);font-weight:700}
+.alert{padding:.7rem 1rem;border-radius:10px;margin:.8rem 0}
+.alert.err{background:rgba(255,77,94,.1);border:1px solid rgba(255,77,94,.4)}
+.alert.ok{background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.4)}
+.btn{background:var(--cyan);color:#04121c;font-weight:700;border:0;border-radius:10px;
+  padding:.7rem 1.4rem;font-size:1rem;cursor:pointer}
+.btn:hover{filter:brightness(1.1)}
+.note{color:var(--muted);font-size:.9rem}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <a class="brand" href="/">
+      <img src="/static/logo.png" alt="Ravix logo">
+      <span class="brand-text"><span>RAVIX <em>FANTASY SPORTS</em></span><small>Football Pool</small></span>
+    </a>
+    <nav>
+      <a href="/">Standings</a>
+      <a href="/week/{{ season }}/{{ week }}">This Week</a>
+    </nav>
+  </div>
+</header>
+<main>
+  <div class="wrap">
+    {% block content %}{% endblock %}
+  </div>
+</main>
+<footer>
+  <div class="wrap">
+    <span>Ravix Football Pool · 2026 season</span>
+    <span class="disclaimer">Ravix Fantasy Sports is a recreational club for friendly competition — no gambling.</span>
+  </div>
+</footer>
+</body>
+</html>

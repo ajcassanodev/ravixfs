@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Commissioner · Ravix Football Pool{% endblock %}
+{% block content %}
+<h2>Commissioner <small>football pool · {{ season }}</small></h2>
+
+<h3>Week {{ week }} slate</h3>
+<p class="note">Uncheck games to exclude them from the pool. Defaults to all games.</p>
+<div class="note" style="margin-bottom:.6rem">Weeks:
+{% for w in weeks %}{% if w == week %}<b>{{ w }}</b>{% else %}<a href="/admin/{{ token }}?week={{ w }}">{{ w }}</a>{% endif %} {% endfor %}
+</div>
+<form method="post" action="/admin/{{ token }}/games">
+<input type="hidden" name="week" value="{{ week }}">
+{% for g in games %}
+<div class="game-row">
+  <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+    <input type="checkbox" name="incl_{{ g.away_team }}_{{ g.home_team }}" value="1"
+           {% if g.included %}checked{% endif %} style="accent-color:var(--cyan);width:18px;height:18px">
+    <span class="teams">{{ g.away_team }} @ {{ g.home_team }}</span>
+  </label>
+  <span class="ko">{{ g.ko_et }}</span>
+</div>
+{% endfor %}
+<p><button class="btn" type="submit">Save slate</button></p>
+</form>
+
+<h3>Members</h3>
+<table class="standings">
+  <tr><th>Member</th><th>Pick link</th></tr>
+  {% for name, is_test, link in links %}
+  <tr><td>{{ name }}{% if is_test %} <span class="note">(test)</span>{% endif %}</td>
+      <td><a href="{{ link }}">{{ link }}</a></td></tr>
+  {% else %}
+  <tr><td colspan="2" class="note">No members yet.</td></tr>
+  {% endfor %}
+</table>
+
+<h3>Add member</h3>
+<form method="post" action="/admin/{{ token }}/members/add">
+  <p><input name="name" placeholder="Member name" required
+       style="padding:.6rem .8rem;border-radius:8px;border:1px solid var(--line);background:var(--bg2);color:var(--text)">
+     <label class="note"><input type="checkbox" name="is_test" value="1"> test member</label>
+     <button class="btn" type="submit">Add</button></p>
+</form>
+<p class="note">New members are created in the shared Ravix member store — a pick link from any Ravix game also works here.</p>
+{% endblock %}

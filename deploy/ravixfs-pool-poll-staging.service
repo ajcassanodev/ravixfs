@@ -1,0 +1,10 @@
+[Unit]
+Description=ravixfs pool staging data poller
+
+[Service]
+Type=oneshot
+User=ravixfs
+Group=ravixfs
+EnvironmentFile=/etc/ravixfs.env
+Environment=POOL_DB=/opt/ravixfs-pool-staging/pool.db
+ExecStart=/opt/ravixfs-pool-staging/venv/bin/python /opt/ravixfs-pool-staging/pool/poll.py

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Standings · Ravix Football Pool{% endblock %}
+{% block content %}
+<h2>Season Standings <small>2026 · Week {{ week }} · 1 pt per correct pick</small></h2>
+<table class="standings">
+  <tr><th>#</th><th>Member</th><th class="num">Pts</th><th class="num">This week</th></tr>
+  {% for mid, name, total, is_test in table %}
+  <tr class="{% if loop.index == 1 %}top1{% elif loop.index == 2 %}top2{% elif loop.index == 3 %}top3{% endif %}">
+    <td>{{ loop.index }}</td><td>{{ name }}</td>
+    <td class="num"><b>{{ total }}</b></td>
+    <td class="num">{{ wk[mid][0] }}–{{ wk[mid][1] - wk[mid][0] }} <span class="note">({{ wk[mid][1] }} final)</span></td>
+  </tr>
+  {% else %}
+  <tr><td colspan="4" class="note">No members yet — the commissioner adds members from the admin page.</td></tr>
+  {% endfor %}
+</table>
+
+{% if test_table %}
+<h3>Test members <small>staging only</small></h3>
+<table class="standings">
+  <tr><th>Member</th><th class="num">Pts</th></tr>
+  {% for mid, name, total, is_test in test_table %}
+  <tr><td>{{ name }}</td><td class="num"><b>{{ total }}</b></td></tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+<h3>Week {{ week }} games</h3>
+{% for g in games %}
+<div class="game-row {% if g.started %}locked{% endif %}">
+  <span class="teams">{{ g.away_team }} @ {{ g.home_team }}</span>
+  {% if g.is_final %}<span class="score">{{ g.away_score }}–{{ g.home_score }}</span>
+    {% if g.winner %}<span class="note">winner: {{ g.winner }}</span>{% else %}<span class="note">tie — no points</span>{% endif %}
+    <span class="badge final">final</span>
+  {% elif g.started %}<span class="badge lock">locked</span>
+  {% else %}<span class="badge open">open</span>{% endif %}
+  <span class="ko">{{ g.ko_et }}</span>
+</div>
+{% endfor %}
+<p><a href="/week/{{ season }}/{{ week }}">Full week detail →</a></p>
+{% endblock %}

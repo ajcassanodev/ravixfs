@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}My Picks · Ravix Football Pool{% endblock %}
+{% block content %}
+<h2>Week {{ week }} picks <small>{{ member.name }} · pick window closes at each game's kickoff</small></h2>
+
+{% if saved %}<div class="alert ok">Saved {{ saved }} pick{{ 's' if saved != '1' }}.</div>{% endif %}
+{% for e in errors %}<div class="alert err">{{ e }}</div>{% endfor %}
+
+<form method="post" action="/pick/{{ token }}">
+{% for g in games %}
+  {% set key = (g.away_team, g.home_team) %}
+  {% set cur = existing.get(key, '') %}
+  <div class="game-row {% if g.started %}locked{% endif %}">
+    <span class="teams">{{ g.away_team }} @ {{ g.home_team }}</span>
+    {% if g.is_final %}
+      <span class="score">{{ g.away_score }}–{{ g.home_score }}</span>
+      <span class="badge final">final</span>
+    {% elif g.started %}
+      <span class="badge lock">locked</span>
+      {% if cur %}<span class="note">your pick: <b>{{ cur }}</b></span>
+      {% else %}<span class="note">no pick</span>{% endif %}
+    {% else %}
+      <span class="pick-opts">
+        <label class="{% if cur == g.away_team %}sel{% endif %}">
+          <input type="radio" name="g_{{ g.away_team }}_{{ g.home_team }}" value="{{ g.away_team }}"
+                 {% if cur == g.away_team %}checked{% endif %}> {{ g.away_team }}</label>
+        <label class="{% if cur == g.home_team %}sel{% endif %}">
+          <input type="radio" name="g_{{ g.away_team }}_{{ g.home_team }}" value="{{ g.home_team }}"
+                 {% if cur == g.home_team %}checked{% endif %}> {{ g.home_team }}</label>
+      </span>
+      <span class="badge open">open</span>
+    {% endif %}
+    <span class="ko">{{ g.ko_et }}</span>
+  </div>
+{% else %}
+  <p class="note">No games selected for this week yet — check back after the commissioner sets the slate.</p>
+{% endfor %}
+{% if games %}<p><button class="btn" type="submit">Save picks</button></p>{% endif %}
+</form>
+<p class="note">1 point per correct pick. You can change any pick until that game's kickoff; games you don't pick simply score 0.</p>
+{% endblock %}

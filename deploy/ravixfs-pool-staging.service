@@ -1,0 +1,19 @@
+[Unit]
+Description=ravixfs POOL STAGING site (staging-footballpool.ravixfs.com)
+After=network.target
+
+[Service]
+User=ravixfs
+Group=ravixfs
+WorkingDirectory=/opt/ravixfs-pool-staging
+EnvironmentFile=/etc/ravixfs.env
+Environment=POOL_DB=/opt/ravixfs-pool-staging/pool.db
+Environment=SHARED_MEMBER_DB=/opt/ravixfs-shared-staging/shared.db
+Environment=POOL_IMPORT_DB=/opt/ravixfs-staging/ravixfs.db
+Environment=RAVIX_ENV=staging
+ExecStart=/opt/ravixfs-pool-staging/venv/bin/uvicorn pool.main:app --host 127.0.0.1 --port 8002
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

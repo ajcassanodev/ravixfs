@@ -9,3 +9,7 @@ www.ravixfs.com {
 staging.ravixfs.com {
 	reverse_proxy localhost:8001
 }
+
+staging-footballpool.ravixfs.com {
+	reverse_proxy localhost:8002
+}

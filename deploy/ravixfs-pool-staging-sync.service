@@ -1,0 +1,10 @@
+[Unit]
+Description=ravixfs pool staging code sync (git pull origin staging-pool)
+
+[Service]
+Type=oneshot
+User=ravixfs
+Group=ravixfs
+WorkingDirectory=/opt/ravixfs-pool-staging
+# Pull latest staging-pool code; restart the pool staging app only when something changed.
+ExecStart=/bin/bash -c 'BEFORE=$(git rev-parse HEAD); git pull --ff-only --quiet origin staging-pool; AFTER=$(git rev-parse HEAD); if [ "$BEFORE" != "$AFTER" ]; then /opt/ravixfs-pool-staging/venv/bin/pip install -q -r requirements.txt; sudo /bin/systemctl restart ravixfs-pool-staging.service; fi'

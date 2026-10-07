@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Week {{ week }} · Ravix Football Pool{% endblock %}
+{% block content %}
+<h2>Week {{ week }} <small>{{ season }} · results & picks</small></h2>
+
+<h3>Games</h3>
+{% for g in games %}
+<div class="game-row {% if g.started %}locked{% endif %}">
+  <span class="teams">{{ g.away_team }} @ {{ g.home_team }}</span>
+  {% if not g.included %}<span class="note">not in pool</span>
+  {% elif g.is_final %}<span class="score">{{ g.away_score }}–{{ g.home_score }}</span>
+    {% if g.winner %}<span class="note">winner: <b>{{ g.winner }}</b></span>{% else %}<span class="note">tie — no points</span>{% endif %}
+    <span class="badge final">final</span>
+  {% elif g.started %}<span class="badge lock">in progress</span>
+  {% else %}<span class="badge open">open</span>{% endif %}
+  <span class="ko">{{ g.ko_et }}</span>
+</div>
+{% endfor %}
+
+<h3>Members</h3>
+<table class="standings">
+  <tr><th>Member</th><th class="num">W</th><th class="num">L</th>
+    {% for g in games %}{% if g.included %}<th>{{ g.away_team }}@{{ g.home_team }}</th>{% endif %}{% endfor %}
+  </tr>
+  {% for r in rows %}
+  <tr class="{% if loop.index == 1 and not r.is_test %}top1{% endif %}">
+    <td>{{ r.name }}{% if r.is_test %} <span class="note">(test)</span>{% endif %}</td>
+    <td class="num"><b>{{ r.correct }}</b></td><td class="num">{{ r.decided - r.correct }}</td>
+    {% for g in games %}{% if g.included %}
+      {% set p = picks[r.id].get((g.away_team, g.home_team), '') %}
+      <td>{% if p %}{{ p }}{% if g.winner == p %} ✓{% elif g.winner %} ✗{% endif %}{% else %}<span class="note">–</span>{% endif %}</td>
+    {% endif %}{% endfor %}
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}
