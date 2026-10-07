@@ -4,7 +4,7 @@ import secrets
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -41,20 +41,98 @@ def _resolve_player(con, name: str):
     return rows[0], None
 
 
+def _ticker_data(con, season: int) -> dict:
+    """Live points data: current (latest-scored) week, real members only.
+
+    Uses the latest week with stats rows (what the 15-min poller updates).
+    Test members are excluded from the ticker.
+    """
+    wrow = con.execute(
+        "SELECT MAX(week) AS w FROM weekly_stats WHERE season = ?", (season,)
+    ).fetchone()
+    week = wrow["w"] or 0
+    if not week:
+        week = _db.current_pick_week(con, season)
+    entries = []
+    for m in con.execute(
+        "SELECT id, name FROM members WHERE COALESCE(is_test, 0) = 0 ORDER BY name"
+    ):
+        pts, _ = scoring.member_week_points(con, m["id"], season, week)
+        entries.append({"name": m["name"], "points": pts})
+    entries.sort(key=lambda e: e["points"], reverse=True)
+    # "LIVE" while any game of this week has kicked off and it's the
+    # current pick week (i.e. games may still be in progress).
+    live = False
+    games = con.execute(
+        "SELECT kickoff_utc FROM games WHERE season = ? AND week = ?",
+        (season, week),
+    ).fetchall()
+    if games and week == _db.current_pick_week(con, season):
+        now = datetime.now(timezone.utc)
+        for g in games:
+            ko = datetime.fromisoformat(g["kickoff_utc"])
+            if ko.tzinfo is None:
+                ko = ko.replace(tzinfo=timezone.utc)
+            if ko <= now:
+                live = True
+                break
+    try:
+        from zoneinfo import ZoneInfo
+        stamp = datetime.now(ZoneInfo("America/New_York")).strftime("%-I:%M %p ET")
+    except Exception:
+        stamp = datetime.now(timezone.utc).strftime("%H:%M UTC")
+    return {"week": week, "entries": entries, "live": live, "updated": stamp}
+
+
+@app.get("/ticker.json")
+def ticker_json():
+    con = _db.connect()
+    season = _db.current_season(con)
+    data = _ticker_data(con, season)
+    con.close()
+    return JSONResponse(data)
+
+
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
     con = _db.connect()
     season = _db.current_season(con)
-    table, test_table = scoring.standings(con, season)
     wrow = con.execute(
         "SELECT MAX(week) AS w FROM weekly_stats WHERE season = ?", (season,)
     ).fetchone()
+    through_week = wrow["w"] or 0
+    table_now, test_table = scoring.standings(con, season, through_week)
+    table_prev, _ = (
+        scoring.standings(con, season, through_week - 1)
+        if through_week > 1 else ([], [])
+    )
+    rank_prev = {mid: i + 1 for i, (mid, _, _) in enumerate(table_prev)}
+    standings = []
+    for i, (mid, name, total) in enumerate(table_now):
+        rank = i + 1
+        lp = _db.member_locked_player(con, mid, season)
+        pr = rank_prev.get(mid)
+        if pr is None:
+            move_class, move_arrow = "move-same", "–"
+        elif pr > rank:
+            move_class, move_arrow = "move-up", "▲"
+        elif pr < rank:
+            move_class, move_arrow = "move-down", "▼"
+        else:
+            move_class, move_arrow = "move-same", "·"
+        standings.append({
+            "rank": rank, "name": name, "total": total,
+            "move_class": move_class, "move_arrow": move_arrow,
+            "locked_name": lp["name"] if lp else "",
+            "locked_team": lp["team"] if lp else "",
+        })
+    ticker = _ticker_data(con, season)
     cfg = scoring.scoring_map(con)
     con.close()
     return templates.TemplateResponse(request, "index.html", {
-        "request": request, "season": season, "table": table,
-        "test_table": test_table,
-        "through_week": wrow["w"] or 0, "scoring": cfg,
+        "request": request, "season": season, "standings": standings,
+        "test_table": test_table, "ticker": ticker,
+        "through_week": through_week, "scoring": cfg,
     })
 
 
@@ -68,10 +146,11 @@ def week_view(request: Request, season: int, week: int):
         detail.append((m["name"], total, lines))
     detail.sort(key=lambda r: r[1], reverse=True)
     stat_keys = scoring.STAT_KEYS
+    ticker = _ticker_data(con, season)
     con.close()
     return templates.TemplateResponse(request, "week.html", {
         "request": request, "season": season, "week": week,
-        "detail": detail, "stat_keys": stat_keys,
+        "detail": detail, "stat_keys": stat_keys, "ticker": ticker,
     })
 
 

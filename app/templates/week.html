@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Week {{ week }}{% endblock %}
+{% block ticker %}{% include "_ticker.html" %}{% endblock %}
 {% block content %}
 <h2>Week {{ week }}, {{ season }}</h2>
 {% for name, total, lines in detail %}
@@ -17,3 +18,4 @@
 </table>
 {% endfor %}
 {% endblock %}
+{% block scripts %}{% include "_ticker_scripts.html" %}{% endblock %}

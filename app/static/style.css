@@ -1,21 +1,144 @@
-body { font-family: system-ui, -apple-system, sans-serif; max-width: 900px;
-       margin: 0 auto; padding: 0 1rem; color: #1a1a1a; }
-header { display: flex; align-items: baseline; gap: 2rem;
-         border-bottom: 2px solid #b31b1b; margin-bottom: 1rem; }
-header h1 a { color: #b31b1b; text-decoration: none; }
-nav a { margin-right: 1rem; color: #333; }
-table { border-collapse: collapse; margin: 1rem 0; width: 100%; }
-th, td { border: 1px solid #ccc; padding: 0.4rem 0.6rem; text-align: left; }
-th { background: #f4f4f4; }
-.err { color: #b31b1b; font-weight: bold; }
-.ok { color: #1b7a2e; font-weight: bold; }
-.warn { color: #9a6a00; }
-.note { color: #666; font-size: 0.9rem; }
-form { margin: 1rem 0; }
-input, button { font-size: 1rem; padding: 0.35rem 0.5rem; margin: 0.15rem; }
-button { background: #b31b1b; color: white; border: none; border-radius: 4px;
-         cursor: pointer; }
-button:hover { background: #8f1515; }
-footer { margin-top: 2rem; border-top: 1px solid #ccc; color: #888;
-         font-size: 0.85rem; }
-code { background: #f4f4f4; padding: 0.1rem 0.3rem; }
+/* Ravix dark theme — matches the ravixfs.com landing page */
+:root{
+  --bg:#0a0c11;
+  --bg2:#10141c;
+  --card:#131824;
+  --line:rgba(120,180,220,.14);
+  --cyan:#45c2ff;
+  --cyan-dim:rgba(69,194,255,.12);
+  --red:#ff4d5e;
+  --green:#4ade80;
+  --gold:#f5c451;
+  --silver:#c7d2e0;
+  --bronze:#d08a4e;
+  --text:#eef3f8;
+  --muted:#9aa7b8;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  background:var(--bg);
+  color:var(--text);
+  min-height:100vh;
+  display:flex;flex-direction:column;
+  -webkit-font-smoothing:antialiased;
+}
+body::before{
+  content:"";position:fixed;inset:0;pointer-events:none;
+  background:
+    radial-gradient(900px 480px at 50% -80px, rgba(69,194,255,.10), transparent 65%),
+    radial-gradient(700px 420px at 85% 110%, rgba(69,194,255,.05), transparent 60%);
+}
+.wrap{width:100%;max-width:1080px;margin:0 auto;padding:0 24px;position:relative;z-index:1}
+h1,h2,h3{font-family:'Space Grotesk','Inter',sans-serif}
+h2{font-size:clamp(22px,3.4vw,30px);margin:1.4rem 0 .8rem}
+h3{font-size:1.15rem;margin:1.2rem 0 .6rem}
+a{color:var(--cyan)}
+small{color:var(--muted);font-weight:400}
+
+/* Header */
+header{padding:18px 0;border-bottom:1px solid var(--line);position:relative;z-index:1}
+header .wrap{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:12px;text-decoration:none;color:var(--text)}
+.brand img{width:42px;height:42px;border-radius:10px;object-fit:contain;
+  box-shadow:0 0 0 1px var(--line), 0 6px 20px rgba(0,0,0,.5)}
+.brand span{font-family:'Space Grotesk',sans-serif;font-weight:700;letter-spacing:.12em;font-size:19px}
+.brand span em{font-style:normal;color:var(--cyan)}
+nav{margin-left:auto;display:flex;gap:4px;flex-wrap:wrap}
+nav a{color:var(--muted);text-decoration:none;font-weight:500;font-size:.95rem;
+  padding:.45rem .75rem;border-radius:8px}
+nav a:hover{color:var(--text);background:rgba(255,255,255,.05)}
+
+/* ---- Points ticker ---- */
+.ticker{
+  background:#0d1524;border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+  overflow:hidden;position:relative;z-index:1;cursor:default;
+  -webkit-user-select:none;user-select:none;
+}
+.ticker-viewport{overflow:hidden}
+.ticker-inner{display:inline-flex;white-space:nowrap;animation:tick 45s linear infinite;will-change:transform}
+.ticker:hover .ticker-inner,.ticker.paused .ticker-inner{animation-play-state:paused}
+@keyframes tick{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+.ticker-half{display:inline-flex;align-items:center}
+.ticker-week{
+  display:inline-flex;align-items:center;gap:8px;margin:0 18px 0 24px;
+  font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:.85rem;letter-spacing:.1em;
+  color:var(--cyan);
+}
+.ticker-week .dot{width:8px;height:8px;border-radius:50%;background:var(--green);
+  animation:pulse 1.6s infinite}
+.ticker-week.final .dot{background:var(--muted);animation:none}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.ticker-item{margin-right:26px;font-size:.95rem;color:var(--muted)}
+.ticker-item b{color:var(--text);font-weight:600;margin-right:6px}
+.ticker-item .pts{color:var(--cyan);font-weight:700;font-variant-numeric:tabular-nums}
+.ticker-stamp{margin-left:8px;margin-right:24px;font-size:.78rem;color:var(--muted);opacity:.75}
+
+/* ---- Standings cards ---- */
+.standings{display:flex;flex-direction:column;gap:10px;margin:1rem 0}
+.stand-card{
+  display:flex;align-items:center;gap:14px;
+  background:linear-gradient(180deg,var(--card),var(--bg2));
+  border:1px solid var(--line);border-radius:14px;padding:14px 18px;
+}
+.rank-badge{
+  font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:1.3rem;
+  min-width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;
+  background:rgba(255,255,255,.04);border:1px solid var(--line);color:var(--muted);
+}
+.stand-card.rank-1 .rank-badge{background:rgba(245,196,81,.14);border-color:rgba(245,196,81,.5);color:var(--gold)}
+.stand-card.rank-2 .rank-badge{background:rgba(199,210,224,.12);border-color:rgba(199,210,224,.45);color:var(--silver)}
+.stand-card.rank-3 .rank-badge{background:rgba(208,138,78,.12);border-color:rgba(208,138,78,.45);color:var(--bronze)}
+.stand-main{flex:1;min-width:0}
+.stand-name{font-weight:600;font-size:1.05rem;display:flex;align-items:center;gap:8px}
+.stand-locked{color:var(--muted);font-size:.85rem;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stand-pts{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:1.5rem;color:var(--cyan);
+  font-variant-numeric:tabular-nums}
+.move{font-size:.8rem;font-weight:700}
+.move-up{color:var(--green)}
+.move-down{color:var(--red)}
+.move-same{color:var(--muted)}
+
+/* ---- Tables (week view, draft, projections, admin) ---- */
+main{flex:1;position:relative;z-index:1}
+main .wrap{padding-top:6px;padding-bottom:40px}
+table{border-collapse:collapse;margin:1rem 0;width:100%;font-size:.95rem}
+th,td{border:1px solid var(--line);padding:.5rem .65rem;text-align:left}
+th{background:rgba(255,255,255,.04);color:var(--muted);font-weight:600;font-size:.85rem;
+  text-transform:uppercase;letter-spacing:.06em}
+tr:nth-child(even) td{background:rgba(255,255,255,.015)}
+
+/* Forms / buttons */
+.err{color:var(--red);font-weight:bold}
+.ok{color:var(--green);font-weight:bold}
+.warn{color:var(--gold)}
+.note{color:var(--muted);font-size:.9rem}
+form{margin:1rem 0}
+input,button,select{font-size:1rem;padding:.4rem .6rem;margin:.15rem;
+  background:#0d1320;border:1px solid var(--line);color:var(--text);border-radius:8px}
+input:focus,select:focus{outline:none;border-color:var(--cyan)}
+button{background:var(--cyan);color:#0a0c11;border:none;border-radius:8px;
+  font-weight:600;cursor:pointer;font-family:'Space Grotesk',sans-serif}
+button:hover{background:#6fd0ff}
+label{color:var(--muted)}
+
+footer{margin-top:auto;padding:24px 0 30px;border-top:1px solid var(--line);
+  color:var(--muted);font-size:.82rem;position:relative;z-index:1}
+footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+footer .disclaimer{opacity:.85}
+
+/* Mobile */
+@media (max-width:640px){
+  .wrap{padding:0 16px}
+  header .wrap{gap:10px}
+  .brand span{font-size:16px}
+  nav{margin-left:0;width:100%}
+  nav a{padding:.4rem .55rem;font-size:.88rem}
+  .ticker-item{font-size:.85rem;margin-right:20px}
+  .stand-card{padding:12px 14px;gap:10px}
+  .stand-pts{font-size:1.25rem}
+  .rank-badge{min-width:38px;height:38px;font-size:1.1rem}
+  table{font-size:.85rem}
+  th,td{padding:.35rem .45rem}
+}

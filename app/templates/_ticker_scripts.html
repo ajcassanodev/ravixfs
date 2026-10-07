@@ -1,0 +1,46 @@
+{# Shared ticker auto-refresh: pauses on touch, refreshes from /ticker.json every 5 minutes. #}
+<script>
+(function () {
+  var t = document.getElementById('ticker');
+  if (!t) return;
+  t.addEventListener('touchstart', function () { t.classList.add('paused'); }, {passive: true});
+  t.addEventListener('touchend', function () { t.classList.remove('paused'); }, {passive: true});
+
+  function halfHTML(d) {
+    var h = '<div class="ticker-half">' +
+      '<span class="ticker-week' + (d.live ? '' : ' final') + '">' +
+      '<span class="dot"></span> WEEK ' + d.week + (d.live ? ' · LIVE' : '') + '</span>';
+    d.entries.forEach(function (e) {
+      h += '<span class="ticker-item"><b></b><span class="pts"></span></span>';
+    });
+    h += '<span class="ticker-stamp">updated ' + d.updated + '</span></div>';
+    return h;
+  }
+
+  function applyData(d) {
+    var inner = document.getElementById('ticker-inner');
+    var tmp = document.createElement('div');
+    tmp.innerHTML = halfHTML(d);
+    var half = tmp.firstChild;
+    var items = half.querySelectorAll('.ticker-item');
+    d.entries.forEach(function (e, i) {
+      if (!items[i]) return;
+      items[i].querySelector('b').textContent = e.name;
+      items[i].querySelector('.pts').textContent = e.points.toFixed(1);
+    });
+    var clone = half.cloneNode(true);
+    clone.setAttribute('aria-hidden', 'true');
+    inner.innerHTML = '';
+    inner.appendChild(half);
+    inner.appendChild(clone);
+  }
+
+  function refresh() {
+    fetch('/ticker.json', {cache: 'no-store'}).then(function (r) {
+      if (!r.ok) throw new Error('bad status');
+      return r.json();
+    }).then(applyData).catch(function () { /* keep last-known values */ });
+  }
+  setInterval(refresh, 5 * 60 * 1000);
+})();
+</script>

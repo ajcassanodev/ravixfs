@@ -4,22 +4,40 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}ravixfs{% endblock %} · NFL Defensive Pick5</title>
+<link rel="icon" href="/static/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 <header>
-  <h1><a href="/">🏈 ravixfs</a></h1>
-  <nav>
-    <a href="/">Standings</a>
-    <a href="/draft">Draft Board</a>
-    <a href="/trades">Trades</a>
-    <a href="/projections">Projections</a>
-    <a href="/guide">How to Play</a>
-  </nav>
+  <div class="wrap">
+    <a class="brand" href="/">
+      <img src="/static/logo.png" alt="Ravix logo">
+      <span>RAVIX <em>FANTASY SPORTS</em></span>
+    </a>
+    <nav>
+      <a href="/">Standings</a>
+      <a href="/draft">Draft Board</a>
+      <a href="/trades">Trades</a>
+      <a href="/projections">Projections</a>
+      <a href="/guide">How to Play</a>
+    </nav>
+  </div>
 </header>
+{% block ticker %}{% endblock %}
 <main>
-{% block content %}{% endblock %}
+  <div class="wrap">
+    {% block content %}{% endblock %}
+  </div>
 </main>
-<footer><p>NFL Defensive Pick5 · test year 2026–27</p></footer>
+<footer>
+  <div class="wrap">
+    <span>NFL Defensive Pick5 · test year 2026–27</span>
+    <span class="disclaimer">Ravix Fantasy Sports is a recreational club for friendly competition — no gambling.</span>
+  </div>
+</footer>
+{% block scripts %}{% endblock %}
 </body>
 </html>

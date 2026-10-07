@@ -1,0 +1,18 @@
+{# Live points ticker band. Context: `ticker` = {week, entries, live, updated}. #}
+<div class="ticker" id="ticker">
+  <div class="ticker-viewport">
+    <div class="ticker-inner" id="ticker-inner">
+      {% for half in (1, 2) %}
+      <div class="ticker-half"{% if half == 2 %} aria-hidden="true"{% endif %}>
+        <span class="ticker-week{% if not ticker.live %} final{% endif %}">
+          <span class="dot"></span> WEEK {{ ticker.week }}{% if ticker.live %} · LIVE{% endif %}
+        </span>
+        {% for e in ticker.entries %}
+        <span class="ticker-item"><b>{{ e.name }}</b><span class="pts">{{ "%.1f"|format(e.points) }}</span></span>
+        {% endfor %}
+        <span class="ticker-stamp">updated {{ ticker.updated }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>

@@ -1,21 +1,33 @@
 {% extends "base.html" %}
 {% block title %}Standings{% endblock %}
+{% block ticker %}{% include "_ticker.html" %}{% endblock %}
 {% block content %}
 <h2>{{ season }} Standings <small>(through week {{ through_week }})</small></h2>
-<table>
-  <tr><th>#</th><th>Member</th><th>Points</th></tr>
-  {% for mid, name, total in table %}
-  <tr><td>{{ loop.index }}</td><td>{{ name }}</td><td><strong>{{ "%.1f"|format(total) }}</strong></td></tr>
+<div class="standings">
+  {% for s in standings %}
+  <div class="stand-card rank-{{ s.rank if s.rank <= 3 else 'x' }}">
+    <div class="rank-badge">{{ s.rank }}</div>
+    <div class="stand-main">
+      <div class="stand-name">{{ s.name }} <span class="move {{ s.move_class }}">{{ s.move_arrow }}</span></div>
+      {% if s.locked_name %}
+      <div class="stand-locked">&#128274; {{ s.locked_name }}{% if s.locked_team %} · {{ s.locked_team }}{% endif %}</div>
+      {% endif %}
+    </div>
+    <div class="stand-pts">{{ "%.1f"|format(s.total) }}</div>
+  </div>
   {% endfor %}
-</table>
+</div>
 {% if test_table %}
 <h3>Test members <small>(excluded from standings)</small></h3>
-<table>
-  <tr><th>Member</th><th>Points</th></tr>
+<div class="standings">
   {% for mid, name, total in test_table %}
-  <tr><td>{{ name }}</td><td>{{ "%.1f"|format(total) }}</td></tr>
+  <div class="stand-card">
+    <div class="rank-badge">T</div>
+    <div class="stand-main"><div class="stand-name">{{ name }}</div></div>
+    <div class="stand-pts">{{ "%.1f"|format(total) }}</div>
+  </div>
   {% endfor %}
-</table>
+</div>
 {% endif %}
 <h3>Weeks</h3>
 <p>
@@ -31,3 +43,4 @@
 </table>
 <p class="note">Defensive TD points stack on the turnover (pick-6 = 3 + 6 = 9).</p>
 {% endblock %}
+{% block scripts %}{% include "_ticker_scripts.html" %}{% endblock %}
