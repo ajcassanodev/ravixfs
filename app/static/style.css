@@ -127,6 +127,7 @@ footer{margin-top:auto;padding:24px 0 30px;border-top:1px solid var(--line);
   color:var(--muted);font-size:.82rem;position:relative;z-index:1}
 footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
 footer .disclaimer{opacity:.85}
+a.upcoming{opacity:.75;font-style:italic}
 
 /* Mobile */
 @media (max-width:640px){

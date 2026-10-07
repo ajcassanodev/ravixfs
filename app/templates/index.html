@@ -31,8 +31,8 @@
 {% endif %}
 <h3>Weeks</h3>
 <p>
-{% for w in range(1, through_week + 1) %}
-  <a href="/week/{{ season }}/{{ w }}">Week {{ w }}</a>{% if not loop.last %} · {% endif %}
+{% for w in range(1, through_week + 2) %}
+  <a href="/week/{{ season }}/{{ w }}"{% if w > through_week %} class="upcoming"{% endif %}>Week {{ w }}{% if w > through_week %} · upcoming{% endif %}</a>{% if not loop.last %} · {% endif %}
 {% endfor %}
 </p>
 <h3>Scoring</h3>
