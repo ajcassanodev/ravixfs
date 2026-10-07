@@ -41,11 +41,18 @@ def _resolve_player(con, name: str):
     return rows[0], None
 
 
-def _ticker_data(con, season: int) -> dict:
-    """Live points data: current (latest-scored) week, real members only.
+def _is_staging_host(host: str) -> bool:
+    """True on the staging instance (staging.ravixfs.com). Used to relax
+    test-member filtering there so the ticker is visible during the test pass."""
+    return (host or "").lower().startswith("staging.")
+
+
+def _ticker_data(con, season: int, include_test: bool = False) -> dict:
+    """Live points data: current (latest-scored) week.
 
     Uses the latest week with stats rows (what the 15-min poller updates).
-    Test members are excluded from the ticker.
+    Test members are excluded from the ticker, except on staging where
+    they are included so the ticker is visible during the test pass.
     """
     wrow = con.execute(
         "SELECT MAX(week) AS w FROM weekly_stats WHERE season = ?", (season,)
@@ -54,8 +61,9 @@ def _ticker_data(con, season: int) -> dict:
     if not week:
         week = _db.current_pick_week(con, season)
     entries = []
+    where = "" if include_test else "WHERE COALESCE(is_test, 0) = 0 "
     for m in con.execute(
-        "SELECT id, name FROM members WHERE COALESCE(is_test, 0) = 0 ORDER BY name"
+        "SELECT id, name FROM members " + where + "ORDER BY name"
     ):
         pts, _ = scoring.member_week_points(con, m["id"], season, week)
         entries.append({"name": m["name"], "points": pts})
@@ -85,10 +93,10 @@ def _ticker_data(con, season: int) -> dict:
 
 
 @app.get("/ticker.json")
-def ticker_json():
+def ticker_json(request: Request):
     con = _db.connect()
     season = _db.current_season(con)
-    data = _ticker_data(con, season)
+    data = _ticker_data(con, season, include_test=_is_staging_host(request.headers.get("host", "")))
     con.close()
     return JSONResponse(data)
 
@@ -126,7 +134,7 @@ def index(request: Request):
             "locked_name": lp["name"] if lp else "",
             "locked_team": lp["team"] if lp else "",
         })
-    ticker = _ticker_data(con, season)
+    ticker = _ticker_data(con, season, include_test=_is_staging_host(request.headers.get("host", "")))
     cfg = scoring.scoring_map(con)
     con.close()
     return templates.TemplateResponse(request, "index.html", {
@@ -146,7 +154,7 @@ def week_view(request: Request, season: int, week: int):
         detail.append((m["name"], total, lines))
     detail.sort(key=lambda r: r[1], reverse=True)
     stat_keys = scoring.STAT_KEYS
-    ticker = _ticker_data(con, season)
+    ticker = _ticker_data(con, season, include_test=_is_staging_host(request.headers.get("host", "")))
     con.close()
     return templates.TemplateResponse(request, "week.html", {
         "request": request, "season": season, "week": week,
