@@ -70,12 +70,12 @@
 <table>
   <tr>
     {% for h in sort_links %}
-    <th{% if h.active %} style="background:#e8eef7"{% endif %}><a href="{{ h.url }}">{{ h.label }}{{ h.arrow }}</a></th>
+    <th{% if h.active %} class="sort-active"{% endif %}><a href="{{ h.url }}">{{ h.label }}{{ h.arrow }}</a></th>
     {% endfor %}
     {% if member %}<th></th>{% endif %}
   </tr>
   {% for r in rows %}
-  <tr{% if loop.index0 < 25 %} style="background:#fef6e0"{% endif %}>
+  <tr{% if loop.index0 < 25 %} class="top25"{% endif %}>
     <td>{{ r.name }}</td>
     <td>{{ r.team }}</td>
     <td>{{ r.position }}</td>

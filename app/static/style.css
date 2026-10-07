@@ -108,6 +108,10 @@ th,td{border:1px solid var(--line);padding:.5rem .65rem;text-align:left}
 th{background:rgba(255,255,255,.04);color:var(--muted);font-weight:600;font-size:.85rem;
   text-transform:uppercase;letter-spacing:.06em}
 tr:nth-child(even) td{background:rgba(255,255,255,.015)}
+tr.top25 td{background:rgba(245,196,81,.10)}
+tr.top25 td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
+th.sort-active{background:rgba(69,194,255,.16)}
+th.sort-active a{color:#fff}
 
 /* Forms / buttons */
 .err{color:var(--red);font-weight:bold}
