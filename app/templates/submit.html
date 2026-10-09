@@ -33,4 +33,20 @@
   <button type="submit">Submit picks</button>
 </form>
 <p class="note">Each pick locks when that player's game kicks off. Bye-week or inactive picks score 0.</p>
+
+<h3>Pick reminders</h3>
+{% if request.query_params.get('reminders') == 'saved' %}
+<p class="ok">Reminder settings saved.</p>
+{% elif request.query_params.get('reminders') == 'badphone' %}
+<p class="err">That phone number doesn't look like a valid US mobile number — reminders not changed.</p>
+{% endif %}
+<form method="post" action="/submit/{{ token }}/reminders">
+  <label>Mobile number:
+    <input name="phone" value="{{ member.phone or '' }}" placeholder="(585) 555-0123" autocomplete="tel" size="18">
+  </label><br>
+  <label><input type="checkbox" name="sms_opt_in" value="1"{% if member.sms_opt_in %} checked{% endif %}>
+    Text me Thursday mornings if I haven't made my picks</label><br>
+  <button type="submit">Save reminders</button>
+</form>
+<p class="note">One text per week, only when you're missing picks. Standard message rates apply.</p>
 {% endblock %}

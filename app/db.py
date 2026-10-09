@@ -30,6 +30,10 @@ def _migrate(con) -> None:
     cols = {r["name"] for r in con.execute("PRAGMA table_info(members)")}
     if "is_test" not in cols:
         con.execute("ALTER TABLE members ADD COLUMN is_test INTEGER NOT NULL DEFAULT 0")
+    if "phone" not in cols:
+        con.execute("ALTER TABLE members ADD COLUMN phone TEXT")
+    if "sms_opt_in" not in cols:
+        con.execute("ALTER TABLE members ADD COLUMN sms_opt_in INTEGER NOT NULL DEFAULT 0")
 
 
 def utcnow_iso() -> str:

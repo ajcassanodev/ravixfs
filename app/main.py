@@ -10,6 +10,7 @@ from fastapi.templating import Jinja2Templates
 
 from . import db as _db
 from . import scoring
+from . import sms as _sms
 from . import matchup
 from shared import identity as _identity
 
@@ -373,6 +374,29 @@ def submit_picks(
         "kickoffs": kos, "now": now.isoformat(), "existing": [],
         "errors": errors, "token": token,
     })
+
+
+@app.post("/submit/{token}/reminders")
+def save_reminders(token: str, phone: str = Form(""), sms_opt_in: str = Form("")):
+    """Save a member's SMS reminder settings from their picks page."""
+    con = _db.connect()
+    m = con.execute("SELECT * FROM members WHERE pick_token = ?", (token,)).fetchone()
+    if not m:
+        con.close()
+        raise HTTPException(404, "bad pick link")
+    phone = (phone or "").strip()
+    opt_in = 1 if sms_opt_in == "1" else 0
+    e164 = _sms.normalize_phone(phone) if phone else None
+    if opt_in and phone and not e164:
+        con.close()
+        return RedirectResponse(f"/submit/{token}?reminders=badphone", status_code=303)
+    con.execute(
+        "UPDATE members SET phone = ?, sms_opt_in = ? WHERE id = ?",
+        (e164, opt_in, m["id"]),
+    )
+    con.commit()
+    con.close()
+    return RedirectResponse(f"/submit/{token}?reminders=saved", status_code=303)
 
 
 # ---------------- admin ----------------

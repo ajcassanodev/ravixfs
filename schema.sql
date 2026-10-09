@@ -41,7 +41,18 @@ CREATE TABLE IF NOT EXISTS members (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   name       TEXT NOT NULL,
   pick_token TEXT NOT NULL UNIQUE,      -- secret per-member submit URL
-  is_test    INTEGER NOT NULL DEFAULT 0 -- 1 = test member, hidden from real standings
+  is_test    INTEGER NOT NULL DEFAULT 0, -- 1 = test member, hidden from real standings
+  phone      TEXT,                      -- E.164 mobile for SMS pick reminders
+  sms_opt_in INTEGER NOT NULL DEFAULT 0 -- 1 = text me Thursday mornings
+);
+
+-- Thursday-morning pick reminders already sent (one per member per week).
+CREATE TABLE IF NOT EXISTS sms_reminders (
+  season    INTEGER NOT NULL,
+  week      INTEGER NOT NULL,
+  member_id INTEGER NOT NULL REFERENCES members(id),
+  sent_at   TEXT NOT NULL,              -- ISO-8601 UTC
+  PRIMARY KEY (season, week, member_id)
 );
 
 -- One active row per member (partial unique index enforces it).

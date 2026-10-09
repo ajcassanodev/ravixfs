@@ -87,6 +87,7 @@ def kickoff_utc(gameday: str, gametime: str) -> str:
 def main(check: bool = False):
     now = datetime.now(timezone.utc)
     con = sqlite3.connect(DB_PATH)
+    con.row_factory = sqlite3.Row  # dict-style rows (used by the SMS module)
     con.execute("PRAGMA foreign_keys = ON")
 
     # ---- games (always) ----
@@ -223,6 +224,26 @@ def main(check: bool = False):
             print(f"offense team-weeks upserted: {len(off_agg)}")
     if not check:
         con.commit()
+
+    # ---- Thursday-morning SMS pick reminders ----
+    # Runs inside main() so it rides the existing 15-min systemd timer; the
+    # sms module gates on the 9:00-9:15 AM ET Thursday window and records
+    # each send, so this is a safe no-op on every other run.
+    if not check:
+        try:
+            sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+            from app import sms as _sms
+            now_et = datetime.now(ET)
+            if _sms.thursday_reminder_due(now_et):
+                n = _sms.run_pick_reminders(
+                    con, season, now_et,
+                    os.environ.get("RAVIX_BASE_URL", "https://staging.ravixfs.com"),
+                )
+                print(f"sms reminders sent: {n}")
+        except Exception as exc:
+            # Reminders must never break the stats poll.
+            print(f"sms reminders skipped: {exc}")
+
     con.close()
     print("check mode: no writes" if check else "done")
 
