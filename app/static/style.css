@@ -176,11 +176,14 @@ a.upcoming{opacity:.75;font-style:italic}
   header .wrap{gap:10px}
   .brand span{font-size:16px}
   nav{margin-left:0;width:100%}
-  nav a{padding:.4rem .55rem;font-size:.88rem}
+  nav a{padding:.75rem .6rem;font-size:.92rem;min-height:44px;display:inline-flex;align-items:center}
   .ticker-item{font-size:.85rem;margin-right:20px}
   .stand-card{padding:12px 14px;gap:10px}
   .stand-pts{font-size:1.25rem}
   .rank-badge{min-width:38px;height:38px;font-size:1.1rem}
   table{font-size:.85rem}
   th,td{padding:.35rem .45rem}
+  th a{display:inline-block;padding:.55rem .3rem;min-height:44px}
+  input,select,button{min-height:44px;font-size:1rem}
+  .plink{padding:.35rem 0}
 }
