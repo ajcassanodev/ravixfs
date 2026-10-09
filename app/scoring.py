@@ -86,7 +86,7 @@ def standings(con, season: int, through_week: int | None = None):
 
 
 def projections(con, season: int, through_week: int):
-    """Per-player projected weekly Pick5 points.
+    """Per-player projected weekly Prime5 points.
 
     Per-game averages over completed weeks (1..through_week) from
     weekly_stats, run through the live scoring_config. Returns a list of

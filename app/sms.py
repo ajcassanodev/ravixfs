@@ -143,7 +143,7 @@ def run_pick_reminders(con, season: int, now_et: datetime, base_url: str) -> int
         if already:
             continue
         body = (
-            f"Ravix Pick5: you haven't made all 4 of your Week {week} picks yet "
+            f"Ravix Prime5: you haven't made all 4 of your Week {week} picks yet "
             f"-- get them in before kickoff: {base_url}/submit/{m['pick_token']}"
         )
         if send_sms(m["phone"], body):

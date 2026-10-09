@@ -1,6 +1,6 @@
-# ravixfs — NFL Defensive Pick5
+# ravixfs — NFL Defensive Prime5
 
-League website for Adam's NFL defensive-player Pick5 game (test year 2026–27).
+League website for Adam's NFL defensive-player Prime5 game (test year 2026–27).
 Members draft one exclusive locked player, then submit 4 fresh defensive picks
 each week. Points come from real NFL stats, refreshed every 15 minutes during
 games.

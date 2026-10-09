@@ -1,10 +1,10 @@
 # Shared member identity — design
 
 **Goal (Adam, 2026-10-07):** one member account across all Ravix apps.
-Anyone Adam sends a pick link to can use every application — Pick5, the
+Anyone Adam sends a pick link to can use every application — Prime5, the
 football pool, and future games — without a second invite.
 
-**Status:** foundation implemented 2026-10-07 (`shared/` package). Pick5 on
+**Status:** foundation implemented 2026-10-07 (`shared/` package). Prime5 on
 staging reads/writes the shared session (additive only). The football pool
 (`pool/`, branch `staging-pool`) is the first app built on it.
 
@@ -62,11 +62,11 @@ only.
   environment and never committed. Every app in an env uses the same secret
   so any of them can verify a session any other one issued.
 - **Opening any pick link establishes the session** (`/submit/{token}` on
-  Pick5, `/pick/{token}` on the pool). A new `/pick` route on each app
+  Prime5, `/pick/{token}` on the pool). A new `/pick` route on each app
   resolves the session to that member's pick link — the "log me in
   everywhere" entry point.
 
-## 5. Migration plan for the Pick5 app
+## 5. Migration plan for the Prime5 app
 
 1. **Staging (done 2026-10-07):** `shared/` ships on the `staging` branch;
    `app/main.py` gains the additive session hooks (set cookie on pick-link
@@ -76,11 +76,11 @@ only.
    add `SHARED_MEMBER_DB` + `RAVIX_ENV=staging` to the staging unit,
    restart. Run the backfill once.
 3. **Pool staging:** same pattern on `staging-pool` (its own checkout, DB,
-   units). The pool lazy-imports Pick5-issued tokens from the Pick5 staging
+   units). The pool lazy-imports Prime5-issued tokens from the Prime5 staging
    DB, so Adam's existing test members work there immediately.
 4. **Prod (after the staging test pass):** merge `shared/` to `main`;
    same env vars with `RAVIX_ENV=prod`, `SESSION_SECRET_PROD`, prod shared
-   DB; run the backfill against the prod Pick5 DB. Prod pick links keep
+   DB; run the backfill against the prod Prime5 DB. Prod pick links keep
    working unchanged.
 
 ## 6. How the decided password login plugs in later

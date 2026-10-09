@@ -1,4 +1,4 @@
-"""ravixfs - NFL defensive Pick5 league site."""
+"""ravixfs - NFL defensive Prime5 league site."""
 import os
 import secrets
 from datetime import datetime, timezone
@@ -291,7 +291,7 @@ def submit_form(request: Request, token: str):
 @app.get("/pick", response_class=HTMLResponse)
 def pick_redirect(request: Request):
     """Cross-game entry point: resolve the shared Ravix session to this
-    member's Pick5 pick link. Additive only -- existing links untouched."""
+    member's Prime5 pick link. Additive only -- existing links untouched."""
     m = _identity.session_member(request)
     if not m:
         raise HTTPException(404, "no Ravix session -- open your pick link first")

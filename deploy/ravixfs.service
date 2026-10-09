@@ -1,5 +1,5 @@
 [Unit]
-Description=ravixfs NFL Defensive Pick5 site
+Description=ravixfs NFL Defensive Prime5 site
 After=network.target
 
 [Service]
