@@ -3,7 +3,7 @@ ravixfs.com {
 	file_server
 }
 
-prod-pick5f.ravixfs.com {
+prod-prime5f.ravixfs.com, prod-pick5f.ravixfs.com {
 	reverse_proxy localhost:8000
 }
 
