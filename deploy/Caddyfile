@@ -14,3 +14,7 @@ www.ravixfs.com {
 staging.ravixfs.com {
 	reverse_proxy localhost:8001
 }
+
+playprime5.com, www.playprime5.com {
+	redir https://ravixfs.com{uri} permanent
+}
