@@ -57,6 +57,15 @@ def team_offense_avgs(con, season: int, through_week: int):
     and league = the same shape averaged across teams. Empty dicts when no
     data is available yet.
     """
+    # The poller creates this table on its next run; the app must not 500
+    # if it hasn't been created yet.
+    con.execute(
+        "CREATE TABLE IF NOT EXISTS offense_stats ("
+        "season INTEGER NOT NULL, week INTEGER NOT NULL, team TEXT NOT NULL, "
+        "ints_thrown REAL NOT NULL DEFAULT 0, sacks_allowed REAL NOT NULL DEFAULT 0, "
+        "fumbles_lost REAL NOT NULL DEFAULT 0, plays REAL NOT NULL DEFAULT 0, "
+        "PRIMARY KEY (season, week, team))"
+    )
     rows = con.execute(
         "SELECT team, AVG(ints_thrown), AVG(sacks_allowed), "
         "AVG(fumbles_lost), AVG(plays) FROM offense_stats "
