@@ -67,7 +67,8 @@
   <button type="submit">Filter</button>
 </form>
 
-<table>
+<div class="table-scroll">
+<table class="projections">
   <tr>
     {% for h in sort_links %}
     <th{% if h.active %} class="sort-active"{% endif %}><a href="{{ h.url }}">{{ h.label }}{{ h.arrow }}</a></th>
@@ -110,6 +111,7 @@
   </tr>
   {% endfor %}
 </table>
+</div>
 <p class="note">Based on final stats from weeks 1–{{ through }}. Proj = per-game averages through the league scoring table
 (tkl {{ scoring.tackles }}, sack {{ scoring.sacks }}, FF {{ scoring.forced_fumbles }}, FR {{ scoring.fumble_recoveries }}, INT {{ scoring.interceptions }}, safety {{ scoring.safeties }}, def TD {{ scoring.def_tds }}).
 Averages don't know matchups or game script — scouts, not gospel. Each pick locks at its own game's kickoff.

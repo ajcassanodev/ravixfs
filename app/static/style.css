@@ -142,6 +142,14 @@ code{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;font-size:.85em
 .mubadge.bad{color:var(--muted);background:rgba(255,255,255,.03);border:1px solid var(--line)}
 .adjcol .muopp{font-size:.72rem;color:var(--muted);margin-top:2px}
 
+/* Projections table layout */
+.table-scroll{overflow-x:auto;margin:1rem -4px;padding:0 4px}
+table.projections{min-width:880px}
+table.projections td:first-child,table.projections th:first-child{min-width:210px}
+table.projections .plink{font-weight:600;font-size:1rem;white-space:nowrap}
+table.projections td:not(:first-child){white-space:nowrap}
+.mubadge{display:inline-block;max-width:200px}
+
 /* Forms / buttons */
 .err{color:var(--red);font-weight:bold}
 .ok{color:var(--green);font-weight:bold}
