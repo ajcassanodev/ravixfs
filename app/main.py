@@ -605,6 +605,15 @@ def _projections_context(con, request, token="", sort="proj", dir="",
 @app.get("/projections", response_class=HTMLResponse)
 def projections_page(request: Request, token: str = "", sort: str = "proj",
                      dir: str = "", pos: str = "", q: str = ""):
+    if not token:
+        # Member opened their personal pick link earlier? The shared session
+        # cookie identifies them, so they don't have to paste their token.
+        try:
+            sm = _identity.session_member(request)
+        except Exception:
+            sm = None
+        if sm is not None and sm["pick_token"]:
+            token = sm["pick_token"]
     con = _db.connect()
     ctx = _projections_context(con, request, token, sort, dir, pos, q)
     con.close()
