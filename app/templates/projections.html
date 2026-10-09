@@ -76,10 +76,11 @@
   </tr>
   {% for r in rows %}
   <tr{% if loop.index0 < 25 %} class="top25"{% endif %}>
-    <td><button type="button" class="plink" data-pid="{{ r.player_id }}">{{ r.name }}</button></td>
+    <td><button type="button" class="plink" data-pid="{{ r.player_id }}">{{ r.name }}</button>{% if r.badge %}<div class="mubadge {{ r.badge.kind }}">{{ r.badge.text }}</div>{% endif %}</td>
     <td>{{ r.team }}</td>
     <td>{{ r.position }}</td>
     <td><strong>{{ "%.2f"|format(r.proj_pts) }}</strong></td>
+    <td class="adjcol">{{ "%.2f"|format(r.adj_pts) }}{% if r.opponent %}<div class="muopp">vs {{ r.opponent }}</div>{% endif %}</td>
     <td>{{ "%.1f"|format(r.avg.tkl) }}</td>
     <td>{{ "%.2f"|format(r.avg.sacks) }}</td>
     <td>{{ "%.2f"|format(r.avg.ff) }}</td>
@@ -111,7 +112,8 @@
 </table>
 <p class="note">Based on final stats from weeks 1–{{ through }}. Proj = per-game averages through the league scoring table
 (tkl {{ scoring.tackles }}, sack {{ scoring.sacks }}, FF {{ scoring.forced_fumbles }}, FR {{ scoring.fumble_recoveries }}, INT {{ scoring.interceptions }}, safety {{ scoring.safeties }}, def TD {{ scoring.def_tds }}).
-Averages don't know matchups or game script — scouts, not gospel. Each pick locks at its own game's kickoff.</p>
+Averages don't know matchups or game script — scouts, not gospel. Each pick locks at its own game's kickoff.
+Adj = projection adjusted for this week's opponent (INTs thrown, sacks allowed, fumbles lost, play volume), capped at ±30%.</p>
 {% endif %}
 
 <!-- Player popup card -->

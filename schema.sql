@@ -91,3 +91,18 @@ INSERT OR IGNORE INTO scoring_config (stat_key, points) VALUES
   ('interceptions', 3),
   ('safeties', 4),
   ('def_tds', 6);
+
+-- Team offensive stats (for matchup intelligence): per-team per-week
+-- aggregates from nflverse stats_player_week. Refreshed by the poller.
+-- ints_thrown/sacks_allowed/fumbles_lost are opponent-tendency inputs;
+-- plays approximates offensive snaps (tackle opportunity).
+CREATE TABLE IF NOT EXISTS offense_stats (
+  season        INTEGER NOT NULL,
+  week          INTEGER NOT NULL,
+  team          TEXT NOT NULL,
+  ints_thrown   REAL NOT NULL DEFAULT 0,
+  sacks_allowed REAL NOT NULL DEFAULT 0,
+  fumbles_lost  REAL NOT NULL DEFAULT 0,
+  plays         REAL NOT NULL DEFAULT 0,
+  PRIMARY KEY (season, week, team)
+);

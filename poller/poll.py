@@ -46,6 +46,38 @@ def to_float(v) -> float:
         return 0.0
 
 
+# nflverse stats_player_week columns used for team offense aggregation.
+# plays ~= offensive snaps: pass attempts + rush attempts + sacks taken.
+OFF_COLS = {
+    "ints_thrown": ("passing_interceptions",),
+    "sacks_allowed": ("sacks_suffered",),
+    "fumbles_lost": ("sack_fumbles_lost", "rushing_fumbles_lost",
+                     "receiving_fumbles_lost"),
+    "plays": ("attempts", "carries", "sacks_suffered"),
+}
+
+
+def aggregate_offense(wstats: list[dict]) -> dict:
+    """(season, week, team) -> {ints_thrown, sacks_allowed, fumbles_lost, plays}.
+
+    Summed over every player row for the team that week (defenders contribute
+    zeros, so no position filter is needed).
+    """
+    agg = {}
+    for w in wstats:
+        try:
+            key = (int(w["season"]), int(w["week"]), (w.get("team") or "").strip())
+        except (TypeError, ValueError):
+            continue
+        if not key[2]:
+            continue
+        d = agg.setdefault(key, {"ints_thrown": 0.0, "sacks_allowed": 0.0,
+                                 "fumbles_lost": 0.0, "plays": 0.0})
+        for out, cols in OFF_COLS.items():
+            d[out] += sum(to_float(w.get(c)) for c in cols)
+    return agg
+
+
 def kickoff_utc(gameday: str, gametime: str) -> str:
     # gametime is Eastern
     local = datetime.strptime(f"{gameday} {gametime}", "%Y-%m-%d %H:%M").replace(tzinfo=ET)
@@ -167,6 +199,28 @@ def main(check: bool = False):
                     (w.get("player_display_name") or w.get("player_name"),
                      w.get("position"), w.get("team"), ts, pid),
                 )
+            # ---- team offense stats (matchup intelligence) ----
+            con.execute(
+                "CREATE TABLE IF NOT EXISTS offense_stats ("
+                "season INTEGER NOT NULL, week INTEGER NOT NULL, team TEXT NOT NULL, "
+                "ints_thrown REAL NOT NULL DEFAULT 0, sacks_allowed REAL NOT NULL DEFAULT 0, "
+                "fumbles_lost REAL NOT NULL DEFAULT 0, plays REAL NOT NULL DEFAULT 0, "
+                "PRIMARY KEY (season, week, team))"
+            )
+            off_agg = aggregate_offense(wstats)
+            for (oseason, oweek, oteam), d in off_agg.items():
+                con.execute(
+                    "INSERT INTO offense_stats (season, week, team, ints_thrown, "
+                    "sacks_allowed, fumbles_lost, plays) VALUES (?,?,?,?,?,?,?) "
+                    "ON CONFLICT (season, week, team) DO UPDATE SET "
+                    "ints_thrown=excluded.ints_thrown, "
+                    "sacks_allowed=excluded.sacks_allowed, "
+                    "fumbles_lost=excluded.fumbles_lost, plays=excluded.plays",
+                    (oseason, oweek, oteam,
+                     round(d["ints_thrown"], 2), round(d["sacks_allowed"], 2),
+                     round(d["fumbles_lost"], 2), round(d["plays"], 1)),
+                )
+            print(f"offense team-weeks upserted: {len(off_agg)}")
     if not check:
         con.commit()
     con.close()

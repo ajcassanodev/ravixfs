@@ -10,6 +10,7 @@ from fastapi.templating import Jinja2Templates
 
 from . import db as _db
 from . import scoring
+from . import matchup
 from shared import identity as _identity
 
 ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "")
@@ -508,6 +509,7 @@ def admin_scoring(token: str, stat_key: str = Form(""), points: float = Form(0))
 
 PROJ_SORTS = {
     "proj": (lambda d: d["proj_pts"], True),
+    "adj": (lambda d: d["adj_pts"], True),
     "player": (lambda d: d["name"].lower(), False),
     "team": (lambda d: d["team"], False),
     "pos": (lambda d: d["position"], False),
@@ -547,6 +549,8 @@ def _projections_context(con, request, token="", sort="proj", dir="",
         if q:
             ql = q.lower()
             rows = [r for r in rows if ql in r["name"].lower()]
+        matchup.annotate_rows(con, season, week, through, rows,
+                              scoring.scoring_map(con))
         keyfn, default_desc = PROJ_SORTS.get(sort, PROJ_SORTS["proj"])
         desc = (dir == "desc") if dir in ("asc", "desc") else default_desc
         rows.sort(key=keyfn, reverse=desc)
@@ -612,6 +616,7 @@ def projections_page(request: Request, token: str = "", sort: str = "proj",
 
 SORT_LABELS = [
     ("player", "Player"), ("team", "Team"), ("pos", "Pos"), ("proj", "Proj"),
+    ("adj", "Adj"),
     ("tkl", "Tkl/g"), ("sack", "Sack/g"), ("ff", "FF/g"), ("fr", "FR/g"),
     ("int", "INT/g"), ("td", "TD/g"), ("season", "Season"),
 ]
