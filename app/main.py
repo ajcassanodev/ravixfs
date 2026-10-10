@@ -11,6 +11,7 @@ from fastapi.templating import Jinja2Templates
 from . import db as _db
 from . import scoring
 from . import sms as _sms
+from . import emailer as _emailer
 from . import matchup
 from shared import identity as _identity
 
@@ -377,8 +378,9 @@ def submit_picks(
 
 
 @app.post("/submit/{token}/reminders")
-def save_reminders(token: str, phone: str = Form(""), sms_opt_in: str = Form("")):
-    """Save a member's SMS reminder settings from their picks page."""
+def save_reminders(token: str, phone: str = Form(""), sms_opt_in: str = Form(""),
+                   email: str = Form(""), email_opt_in: str = Form("")):
+    """Save a member's SMS/email reminder settings from their picks page."""
     con = _db.connect()
     m = con.execute("SELECT * FROM members WHERE pick_token = ?", (token,)).fetchone()
     if not m:
@@ -390,9 +392,15 @@ def save_reminders(token: str, phone: str = Form(""), sms_opt_in: str = Form("")
     if opt_in and phone and not e164:
         con.close()
         return RedirectResponse(f"/submit/{token}?reminders=badphone", status_code=303)
+    email = (email or "").strip()
+    email_opt = 1 if email_opt_in == "1" else 0
+    clean_email = _emailer.valid_email(email) if email else None
+    if email_opt and email and not clean_email:
+        con.close()
+        return RedirectResponse(f"/submit/{token}?reminders=bademail", status_code=303)
     con.execute(
-        "UPDATE members SET phone = ?, sms_opt_in = ? WHERE id = ?",
-        (e164, opt_in, m["id"]),
+        "UPDATE members SET phone = ?, sms_opt_in = ?, email = ?, email_opt_in = ? WHERE id = ?",
+        (e164, opt_in, clean_email, email_opt, m["id"]),
     )
     con.commit()
     con.close()

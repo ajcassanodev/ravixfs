@@ -39,6 +39,8 @@
 <p class="ok">Reminder settings saved.</p>
 {% elif request.query_params.get('reminders') == 'badphone' %}
 <p class="err">That phone number doesn't look like a valid US mobile number — reminders not changed.</p>
+{% elif request.query_params.get('reminders') == 'bademail' %}
+<p class="err">That email address doesn't look valid — reminders not changed.</p>
 {% endif %}
 <form method="post" action="/submit/{{ token }}/reminders">
   <label>Mobile number:
@@ -46,7 +48,12 @@
   </label><br>
   <label><input type="checkbox" name="sms_opt_in" value="1"{% if member.sms_opt_in %} checked{% endif %}>
     Text me Thursday mornings if I haven't made my picks</label><br>
+  <label>Email address:
+    <input name="email" type="email" value="{{ member.email or '' }}" placeholder="you@example.com" autocomplete="email" size="24">
+  </label><br>
+  <label><input type="checkbox" name="email_opt_in" value="1"{% if member.email_opt_in %} checked{% endif %}>
+    Email me Thursday mornings if I haven't made my picks</label><br>
   <button type="submit">Save reminders</button>
 </form>
-<p class="note">One text per week, only when you're missing picks. Standard message rates apply.</p>
+<p class="note">One text and/or one email per week, only when you're missing picks. Standard message rates apply.</p>
 {% endblock %}

@@ -244,6 +244,23 @@ def main(check: bool = False):
             # Reminders must never break the stats poll.
             print(f"sms reminders skipped: {exc}")
 
+    # ---- Thursday-morning email pick reminders ----
+    # Same pattern as SMS: 9:00-9:15 AM ET Thursday window, one email per
+    # member per week, safe no-op on every other run.
+    if not check:
+        try:
+            from app import emailer as _emailer
+            now_et = datetime.now(ET)
+            if _emailer.thursday_reminder_due(now_et):
+                n = _emailer.run_email_reminders(
+                    con, season, now_et,
+                    os.environ.get("RAVIX_BASE_URL", "https://staging.ravixfs.com"),
+                )
+                print(f"email reminders sent: {n}")
+        except Exception as exc:
+            # Reminders must never break the stats poll.
+            print(f"email reminders skipped: {exc}")
+
     con.close()
     print("check mode: no writes" if check else "done")
 

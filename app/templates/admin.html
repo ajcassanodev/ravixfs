@@ -7,13 +7,15 @@
 
 <h3>Members</h3>
 <table>
-  <tr><th>Name</th><th>Test?</th><th>Pick link</th><th>Phone</th><th>SMS?</th></tr>
+  <tr><th>Name</th><th>Test?</th><th>Pick link</th><th>Phone</th><th>SMS?</th><th>Email</th><th>Email?</th></tr>
   {% for m in members %}
   <tr><td>{{ m.name }}</td>
       <td>{% if m.is_test %}yes{% else %}—{% endif %}</td>
       <td><code>/submit/{{ m.pick_token }}</code></td>
       <td>{{ m.phone or '—' }}</td>
-      <td>{% if m.sms_opt_in %}yes{% else %}—{% endif %}</td></tr>
+      <td>{% if m.sms_opt_in %}yes{% else %}—{% endif %}</td>
+      <td>{{ m.email or '—' }}</td>
+      <td>{% if m.email_opt_in %}yes{% else %}—{% endif %}</td></tr>
   {% endfor %}
 </table>
 <form method="post" action="/admin/{{ token }}/members/add">

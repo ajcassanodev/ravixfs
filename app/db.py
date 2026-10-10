@@ -34,6 +34,10 @@ def _migrate(con) -> None:
         con.execute("ALTER TABLE members ADD COLUMN phone TEXT")
     if "sms_opt_in" not in cols:
         con.execute("ALTER TABLE members ADD COLUMN sms_opt_in INTEGER NOT NULL DEFAULT 0")
+    if "email" not in cols:
+        con.execute("ALTER TABLE members ADD COLUMN email TEXT")
+    if "email_opt_in" not in cols:
+        con.execute("ALTER TABLE members ADD COLUMN email_opt_in INTEGER NOT NULL DEFAULT 0")
 
 
 def utcnow_iso() -> str:
