@@ -14,7 +14,7 @@ _TTL = 60
 _TIMEOUT = 8
 
 # Sleeper/DB abbreviation -> ESPN abbreviation.
-_TEAM_FIX = {"WAS": "WSH"}
+_TEAM_FIX = {"WAS": "WSH", "LA": "LAR"}
 
 _cache = {"at": 0.0, "states": {}}
 
