@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from . import db as _db
+from . import gamestate as _gamestate
 from . import scoring
 from . import sms as _sms
 from . import emailer as _emailer
@@ -196,6 +197,60 @@ def week_view(request: Request, season: int, week: int):
     return templates.TemplateResponse(request, "week.html", {
         "request": request, "season": season, "week": week,
         "detail": detail, "stat_keys": stat_keys, "ticker": ticker,
+    })
+
+
+def _et_kickoff_label(ko_iso: str) -> str:
+    """'2026-10-11T20:20Z' -> 'Sun 8:20 PM' (America/New_York)."""
+    try:
+        from zoneinfo import ZoneInfo
+        ko = datetime.fromisoformat(ko_iso)
+        if ko.tzinfo is None:
+            ko = ko.replace(tzinfo=timezone.utc)
+        return ko.astimezone(ZoneInfo("America/New_York")).strftime("%a %-I:%M %p")
+    except Exception:
+        return ""
+
+
+@app.get("/live", response_class=HTMLResponse)
+def live_view(request: Request):
+    """Who's playing right now: every picked player with their game status
+    (live quarter, final, upcoming kickoff, or bye)."""
+    con = _db.connect()
+    season = _db.current_season(con)
+    week = _db.current_pick_week(con, season)
+    states = _gamestate.fetch_states()
+    feed_down = not states
+    members = []
+    live_count = 0
+    for m in con.execute("SELECT id, name FROM members ORDER BY name"):
+        total, lines = scoring.member_week_points(con, m["id"], season, week)
+        picks = []
+        for pid, pname, pteam, src, pts, _stats in lines:
+            game = _gamestate.player_game(pteam, states)
+            if game is None:
+                status, label = ("bye", "Bye")
+            elif game["state"] == "in":
+                status, label = ("live", _gamestate.live_label(game))
+                live_count += 1
+            elif game["state"] == "post":
+                status, label = ("final", game["detail"] or "Final")
+            else:
+                ko = _db.player_kickoff(con, pid, season, week)
+                label = _et_kickoff_label(ko) if ko else (game["detail"] or "Scheduled")
+                status = "upcoming"
+            picks.append({
+                "name": pname, "team": pteam, "src": src,
+                "points": pts, "status": status, "label": label,
+            })
+        members.append({"name": m["name"], "total": total, "picks": picks})
+    members.sort(key=lambda e: e["total"], reverse=True)
+    ticker = _ticker_data(con, season, include_test=_is_staging_host(request.headers.get("host", "")))
+    con.close()
+    return templates.TemplateResponse(request, "live.html", {
+        "request": request, "season": season, "week": week,
+        "members": members, "ticker": ticker,
+        "live_count": live_count, "feed_down": feed_down,
     })
 
 

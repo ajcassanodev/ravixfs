@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Live — Week {{ week }}{% endblock %}
+{% block ticker %}{% include "_ticker.html" %}{% endblock %}
+{% block content %}
+<h2>Live <small>Week {{ week }}, {{ season }}</small></h2>
+<p class="live-sub">
+  {% if live_count %}<span class="live-dot"></span>{{ live_count }} picked player{{ "s" if live_count != 1 }} in live games right now
+  {% else %}No picked players in live games right now.{% endif %}
+  {% if feed_down %}<span class="live-warn">Live feed unavailable — showing kickoff times.</span>{% endif %}
+</p>
+{% for m in members %}
+<h3>{{ m.name }} — {{ "%.1f"|format(m.total) }}</h3>
+<table class="live-table">
+  <tr><th>Player</th><th>Team</th><th>Src</th><th>Pts</th><th>Status</th></tr>
+  {% for p in m.picks %}
+  <tr>
+    <td>{{ p.name }}</td><td>{{ p.team }}</td><td>{{ p.src }}</td>
+    <td><strong>{{ "%.1f"|format(p.points) }}</strong></td>
+    <td><span class="gstatus g-{{ p.status }}">{{ p.label }}</span></td>
+  </tr>
+  {% endfor %}
+  {% if not m.picks %}
+  <tr><td colspan="5" class="muted">No picks yet</td></tr>
+  {% endif %}
+</table>
+{% endfor %}
+{% endblock %}
+{% block scripts %}
+{% include "_ticker_scripts.html" %}
+<script>
+/* Refresh while games are live so quarters stay current. */
+setTimeout(function(){ location.reload(); }, 60000);
+</script>
+{% endblock %}

@@ -140,6 +140,20 @@ code{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;font-size:.85em
   display:inline-block;max-width:220px}
 .mubadge.good{color:#4ade80;background:rgba(74,222,128,.10);border:1px solid rgba(74,222,128,.35)}
 .mubadge.bad{color:var(--muted);background:rgba(255,255,255,.03);border:1px solid var(--line)}
+
+/* Live game status badges (/live) */
+.live-sub{color:var(--muted);margin:.2rem 0 1rem}
+.live-dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--red);
+  margin-right:7px;animation:livepulse 1.6s ease-in-out infinite}
+@keyframes livepulse{0%,100%{opacity:1}50%{opacity:.25}}
+.live-warn{color:var(--gold);margin-left:8px}
+.live-table td.muted{color:var(--muted);font-style:italic}
+.gstatus{display:inline-block;font-size:.78rem;font-weight:600;padding:4px 10px;border-radius:999px;
+  border:1px solid var(--line);white-space:nowrap}
+.g-live{color:#ff6b7a;background:rgba(255,77,94,.10);border-color:rgba(255,77,94,.45)}
+.g-final{color:var(--muted);background:rgba(255,255,255,.03)}
+.g-upcoming{color:var(--cyan);background:var(--cyan-dim);border-color:rgba(69,194,255,.35)}
+.g-bye{color:var(--muted);background:transparent}
 .adjcol .muopp{font-size:.72rem;color:var(--muted);margin-top:2px}
 
 /* Projections table layout */
