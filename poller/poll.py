@@ -261,6 +261,18 @@ def main(check: bool = False):
             # Reminders must never break the stats poll.
             print(f"email reminders skipped: {exc}")
 
+    # ---- Tank01 trial: live box-score snapshots (one-night MNF trial) ----
+    # Rides the 15-min timer; safe no-op without TANK01_API_KEY or outside
+    # the trial window. Stores raw payloads for post-game freshness compare.
+    if not check:
+        try:
+            sys.path.insert(0, os.path.dirname(__file__))
+            import tank01_trial as _trial
+            print(_trial.run_trial(con))
+        except Exception as exc:
+            # Trial must never break the stats poll.
+            print(f"tank01 trial skipped: {exc}")
+
     con.close()
     print("check mode: no writes" if check else "done")
 
