@@ -29,6 +29,13 @@ FIELD_MAP = {
 }
 
 
+def _unwrap(data):
+    """RapidAPI wraps the payload as {statusCode, body: {...}}."""
+    if isinstance(data, dict) and isinstance(data.get("body"), dict):
+        return data["body"]
+    return data if isinstance(data, dict) else {}
+
+
 def run_trial(con) -> str:
     key = os.environ.get("TANK01_API_KEY", "").strip()
     now = datetime.now(timezone.utc)
@@ -49,9 +56,12 @@ def run_trial(con) -> str:
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             payload = resp.read().decode("utf-8")
-        data = json.loads(payload)
+        data = _unwrap(json.loads(payload))
     except Exception as e:
         return f"tank01 trial: fetch failed: {e}"
+    if data.get("error") and not data.get("playerStats"):
+        # e.g. "Game hasn't started yet" before kickoff: nothing to store.
+        return f"tank01 trial: {data['error']}"
     pstats = data.get("playerStats") or {}
     n_def = sum(
         1 for p in pstats.values()
