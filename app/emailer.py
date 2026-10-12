@@ -53,15 +53,18 @@ def _config():
         os.environ.get("RAVIX_SMTP_USER", ""),
         os.environ.get("RAVIX_SMTP_PASS", ""),
         os.environ.get("RAVIX_EMAIL_FROM", "info@ravixfs.com"),
+        os.environ.get("RAVIX_SMTP_STARTTLS", "") == "1",
     )
 
 
 def send_email(to: str, subject: str, body: str) -> bool:
     """Send one email via SMTP. Returns True on success.
 
+    Uses implicit SSL by default; set RAVIX_SMTP_STARTTLS=1 for
+    explicit TLS (STARTTLS), e.g. on port 587.
     Never raises: returns False when unconfigured or when the send fails.
     """
-    host, port, user, pw, sender = _config()
+    host, port, user, pw, sender, starttls = _config()
     if not (user and pw):
         log.warning(
             "Email not configured (missing RAVIX_SMTP_USER/PASS); "
@@ -75,9 +78,15 @@ def send_email(to: str, subject: str, body: str) -> bool:
     msg.set_content(body)
     try:
         ctx = ssl.create_default_context()
-        with smtplib.SMTP_SSL(host, port, context=ctx, timeout=20) as smtp:
-            smtp.login(user, pw)
-            smtp.send_message(msg)
+        if starttls:
+            with smtplib.SMTP(host, port, timeout=20) as smtp:
+                smtp.starttls(context=ctx)
+                smtp.login(user, pw)
+                smtp.send_message(msg)
+        else:
+            with smtplib.SMTP_SSL(host, port, context=ctx, timeout=20) as smtp:
+                smtp.login(user, pw)
+                smtp.send_message(msg)
         log.info("Email sent to %s", to)
         return True
     except Exception as exc:  # network, auth, bad address -- log and move on
