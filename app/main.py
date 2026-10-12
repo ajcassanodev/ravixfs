@@ -32,6 +32,12 @@ def _init_shared_identity():
         _identity.init_shared_db()
     except Exception:
         pass
+    # Run schema migrations on every startup so deploys that add columns
+    # (e.g. email/email_opt_in) apply themselves. Idempotent.
+    try:
+        _db.init_db()
+    except Exception:
+        pass
 
 
 def _establish_session(response, request, member_row) -> None:
