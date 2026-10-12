@@ -7,6 +7,9 @@ User=ravixfs
 Group=ravixfs
 WorkingDirectory=/opt/ravixfs
 EnvironmentFile=/etc/ravixfs.env
+# Explicit DB path: /etc/ravixfs.env must NOT set RAVIXFS_DB, because
+# EnvironmentFile entries override Environment= lines at exec time.
+Environment=RAVIXFS_DB=/opt/ravixfs/ravixfs.db
 ExecStart=/opt/ravixfs/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
 Restart=always
 RestartSec=5

@@ -6,5 +6,7 @@ Type=oneshot
 User=ravixfs
 Group=ravixfs
 EnvironmentFile=/etc/ravixfs.env
+# Explicit DB path: /etc/ravixfs.env must NOT set RAVIXFS_DB, because
+# EnvironmentFile entries override Environment= lines at exec time.
 Environment=RAVIXFS_DB=/opt/ravixfs-staging/ravixfs.db
 ExecStart=/opt/ravixfs-staging/venv/bin/python /opt/ravixfs-staging/poller/poll.py
