@@ -23,6 +23,15 @@ app = FastAPI(title="ravixfs")
 app.mount("/static", StaticFiles(directory=os.path.join(BASE, "static")), name="static")
 templates = Jinja2Templates(directory=os.path.join(BASE, "templates"))
 
+# Cache-bust the stylesheet: browsers hold onto /static/style.css, so every
+# deploy that changes it must change the URL. The file's mtime moves on
+# every git pull, and the app restarts on deploy, so this is always fresh.
+try:
+    _CSS_VERSION = str(int(os.path.getmtime(os.path.join(BASE, "static", "style.css"))))
+except OSError:
+    _CSS_VERSION = "1"
+templates.env.globals["css_version"] = _CSS_VERSION
+
 
 @app.on_event("startup")
 def _init_shared_identity():
