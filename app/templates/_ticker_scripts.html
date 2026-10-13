@@ -1,10 +1,16 @@
-{# Shared ticker auto-refresh: pauses on touch, refreshes from /ticker.json every 5 minutes. #}
+{# Shared ticker auto-refresh: pauses on touch, refreshes from /ticker.json every 5 minutes.
+   When a member's score changed since the previous poll, the entry plays a
+   gold pulse while the number counts up to the new value. #}
 <script>
 (function () {
   var t = document.getElementById('ticker');
   if (!t) return;
   t.addEventListener('touchstart', function () { t.classList.add('paused'); }, {passive: true});
   t.addEventListener('touchend', function () { t.classList.remove('paused'); }, {passive: true});
+
+  var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var prev = {};      // member name -> points at last refresh (empty = first paint, never animate)
+  var prevWeek = null;
 
   function halfHTML(d) {
     var h = '<div class="ticker-half">' +
@@ -17,22 +23,61 @@
     return h;
   }
 
+  function countUp(el, from, to, dur) {
+    if (reduceMotion || Math.abs(to - from) < 0.0001) {
+      el.textContent = to.toFixed(1);
+      return;
+    }
+    var start = null;
+    function frame(ts) {
+      if (!start) start = ts;
+      var p = Math.min(1, (ts - start) / dur);
+      var eased = 1 - Math.pow(1 - p, 3);
+      el.textContent = (from + (to - from) * eased).toFixed(1);
+      if (p < 1) requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  }
+
   function applyData(d) {
+    if (prevWeek !== null && prevWeek !== d.week) prev = {};
+    prevWeek = d.week;
     var inner = document.getElementById('ticker-inner');
     var tmp = document.createElement('div');
     tmp.innerHTML = halfHTML(d);
     var half = tmp.firstChild;
     var items = half.querySelectorAll('.ticker-item');
+    var bumps = [];  // [index, from, to] for entries whose score changed
     d.entries.forEach(function (e, i) {
       if (!items[i]) return;
       items[i].querySelector('b').textContent = e.name;
       items[i].querySelector('.pts').textContent = e.points.toFixed(1);
+      var old = prev[e.name];
+      if (old !== undefined && Math.abs(old - e.points) > 0.0001) {
+        bumps.push([i, old, e.points]);
+      }
+      prev[e.name] = e.points;
     });
     var clone = half.cloneNode(true);
     clone.setAttribute('aria-hidden', 'true');
     inner.innerHTML = '';
     inner.appendChild(half);
     inner.appendChild(clone);
+    // Animate both marquee copies of each changed entry.
+    var halves = [half, clone];
+    bumps.forEach(function (b) {
+      halves.forEach(function (h) {
+        var item = h.querySelectorAll('.ticker-item')[b[0]];
+        if (!item) return;
+        var ptsEl = item.querySelector('.pts');
+        if (!reduceMotion) {
+          item.classList.remove('bump');
+          void item.offsetWidth;  // restart the keyframe animation
+          item.classList.add('bump');
+        }
+        countUp(ptsEl, b[1], b[2], 900);
+      });
+    });
   }
 
   function refresh() {
