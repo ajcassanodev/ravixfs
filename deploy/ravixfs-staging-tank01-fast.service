@@ -1,0 +1,17 @@
+[Unit]
+Description=ravixfs staging Tank01 1-min latency test poller
+
+[Service]
+Type=oneshot
+User=ravixfs
+Group=ravixfs
+EnvironmentFile=/etc/ravixfs.env
+# Explicit DB path: /etc/ravixfs.env must NOT set RAVIXFS_DB, because
+# EnvironmentFile entries override Environment= lines at exec time.
+Environment=RAVIXFS_DB=/opt/ravixfs-staging/ravixfs.db
+# 1-min latency test game(s): comma-separated Tank01 game IDs.
+# Default is Thu 2026-10-15 Seahawks @ Broncos (8:15pm ET). To test a
+# different game, set TANK01_FAST_GAMES in /etc/ravixfs.env (the env file
+# wins over this default, no daemon-reload needed) and restart the timer.
+Environment=TANK01_FAST_GAMES=20261015_SEA@DEN
+ExecStart=/opt/ravixfs-staging/venv/bin/python /opt/ravixfs-staging/poller/tank01_fast.py

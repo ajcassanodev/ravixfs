@@ -69,11 +69,25 @@ def _month_key(now: datetime) -> str:
     return now.strftime("%Y-%m")
 
 
-def _calls_used(con, month: str) -> int:
+def _ensure_tables(con) -> None:
     con.execute(
         "CREATE TABLE IF NOT EXISTS tank01_usage ("
         "month TEXT NOT NULL PRIMARY KEY, calls INTEGER NOT NULL DEFAULT 0)"
     )
+    con.execute(
+        "CREATE TABLE IF NOT EXISTS live_stats ("
+        "player_id TEXT NOT NULL, season INTEGER NOT NULL, week INTEGER NOT NULL, "
+        "tackles REAL NOT NULL DEFAULT 0, sacks REAL NOT NULL DEFAULT 0, "
+        "interceptions REAL NOT NULL DEFAULT 0, forced_fumbles REAL NOT NULL DEFAULT 0, "
+        "fumble_recoveries REAL NOT NULL DEFAULT 0, safeties REAL NOT NULL DEFAULT 0, "
+        "def_tds REAL NOT NULL DEFAULT 0, "
+        "game_id TEXT NOT NULL DEFAULT '', fetched_at TEXT NOT NULL DEFAULT '', "
+        "PRIMARY KEY (player_id, season, week))"
+    )
+
+
+def _calls_used(con, month: str) -> int:
+    _ensure_tables(con)
     row = con.execute(
         "SELECT calls FROM tank01_usage WHERE month = ?", (month,)).fetchone()
     return row["calls"] if row else 0
@@ -118,27 +132,13 @@ def _player_index(con):
     return idx
 
 
-def run_live(con) -> str:
-    key = os.environ.get("TANK01_API_KEY", "").strip()
-    if not key:
-        return "tank01 live: no API key, skipping"
-    now = datetime.now(timezone.utc)
-    month = _month_key(now)
-    if _calls_used(con, month) >= MONTHLY_BUDGET:
-        return f"tank01 live: monthly budget reached ({MONTHLY_BUDGET}), skipping"
-    games = _live_games(con, now)
-    if not games:
-        return "tank01 live: no live games, skipping"
-    con.execute(
-        "CREATE TABLE IF NOT EXISTS live_stats ("
-        "player_id TEXT NOT NULL, season INTEGER NOT NULL, week INTEGER NOT NULL, "
-        "tackles REAL NOT NULL DEFAULT 0, sacks REAL NOT NULL DEFAULT 0, "
-        "interceptions REAL NOT NULL DEFAULT 0, forced_fumbles REAL NOT NULL DEFAULT 0, "
-        "fumble_recoveries REAL NOT NULL DEFAULT 0, safeties REAL NOT NULL DEFAULT 0, "
-        "def_tds REAL NOT NULL DEFAULT 0, "
-        "game_id TEXT NOT NULL DEFAULT '', fetched_at TEXT NOT NULL DEFAULT '', "
-        "PRIMARY KEY (player_id, season, week))"
-    )
+def _poll_games(con, games, key: str, now: datetime):
+    """Fetch box scores for [(season, week, game_id)] and upsert live_stats.
+
+    Shared by the 15-min live poller and the 1-min latency-test path.
+    Returns (n_calls, n_players, n_skipped). Does not commit.
+    """
+    _ensure_tables(con)
     index = _player_index(con)
     fetched_at = now.isoformat()
     n_calls, n_players, n_skipped = 0, 0, 0
@@ -147,10 +147,10 @@ def run_live(con) -> str:
             data = _fetch_boxscore(game_id, key)
             n_calls += 1
         except Exception as e:
-            print(f"tank01 live: {game_id} fetch failed: {e}")
+            print(f"tank01: {game_id} fetch failed: {e}")
             continue
         if data.get("error") and not data.get("playerStats"):
-            print(f"tank01 live: {game_id}: {data['error']}")
+            print(f"tank01: {game_id}: {data['error']}")
             continue
         teams = set(game_id.split("_", 1)[1].split("@"))
         pstats = data.get("playerStats") or {}
@@ -186,6 +186,25 @@ def run_live(con) -> str:
                 (pid, season, week, game_id, fetched_at),
             )
             n_players += 1
+    return n_calls, n_players, n_skipped
+
+
+def _budget_ok(con, month: str) -> bool:
+    return _calls_used(con, month) < MONTHLY_BUDGET
+
+
+def run_live(con) -> str:
+    key = os.environ.get("TANK01_API_KEY", "").strip()
+    if not key:
+        return "tank01 live: no API key, skipping"
+    now = datetime.now(timezone.utc)
+    month = _month_key(now)
+    if not _budget_ok(con, month):
+        return f"tank01 live: monthly budget reached ({MONTHLY_BUDGET}), skipping"
+    games = _live_games(con, now)
+    if not games:
+        return "tank01 live: no live games, skipping"
+    n_calls, n_players, n_skipped = _poll_games(con, games, key, now)
     _record_calls(con, month, n_calls)
     con.commit()
     return (f"tank01 live: {n_calls} box-score call(s), {n_players} player "

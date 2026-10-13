@@ -1,0 +1,9 @@
+[Unit]
+Description=ravixfs staging Tank01 1-min latency test (every minute)
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+
+[Install]
+WantedBy=timers.target
