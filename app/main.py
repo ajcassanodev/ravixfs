@@ -159,6 +159,66 @@ def ticker_json(request: Request):
     return JSONResponse(data)
 
 
+@app.get("/scoring-events.json")
+def scoring_events_json(request: Request, since: str = ""):
+    """Recent scoring plays for picked players, for the notification popups.
+
+    `since` is an ISO timestamp; only events after it are returned. Players
+    are limited to this week's picked set (active locked players + weekly
+    picks, league-wide). Each event carries mine=true when the viewer --
+    identified by the pick-link session cookie -- has that player picked.
+    """
+    con = _db.connect()
+    try:
+        season = _db.current_season(con)
+        week = _db.current_pick_week(con, season)
+        picked = {r["player_id"] for r in con.execute(
+            "SELECT player_id FROM locked_players WHERE season = ? AND active = 1 "
+            "UNION SELECT player_id FROM weekly_picks WHERE season = ? AND week = ?",
+            (season, season, week))}
+        mine = set()
+        if picked:
+            try:
+                sm = _identity.session_member(request)
+                token = sm["pick_token"] if sm and sm["pick_token"] else None
+            except Exception:
+                token = None
+            if token:
+                mine = {r["player_id"] for r in con.execute(
+                    "SELECT lp.player_id FROM locked_players lp "
+                    "JOIN members m ON m.id = lp.member_id "
+                    "WHERE m.pick_token = ? AND lp.season = ? AND lp.active = 1 "
+                    "UNION SELECT wp.player_id FROM weekly_picks wp "
+                    "JOIN members m ON m.id = wp.member_id "
+                    "WHERE m.pick_token = ? AND wp.season = ? AND wp.week = ?",
+                    (token, season, token, season, week))}
+        events = []
+        if picked:
+            q = ("SELECT e.*, p.name, p.team FROM scoring_events e "
+                 "JOIN players p ON p.player_id = e.player_id "
+                 "WHERE e.season = ? AND e.week = ?")
+            args: list = [season, week]
+            if since:
+                q += " AND e.created_at > ?"
+                args.append(since)
+            q += " ORDER BY e.created_at ASC LIMIT 50"
+            for r in con.execute(q, args):
+                if r["player_id"] not in picked:
+                    continue
+                events.append({
+                    "player": r["name"],
+                    "team": r["team"],
+                    "stat": r["stat_key"],
+                    "delta": round(r["new_total"] - r["old_total"], 2),
+                    "points": r["points_delta"],
+                    "at": r["created_at"],
+                    "mine": r["player_id"] in mine,
+                })
+        return JSONResponse({"events": events, "now": _db.utcnow_iso()})
+    finally:
+        con.close()
+
+
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
     con = _db.connect()

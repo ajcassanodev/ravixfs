@@ -140,6 +140,8 @@ def _poll_games(con, games, key: str, now: datetime):
     """
     _ensure_tables(con)
     index = _player_index(con)
+    cfg = {r["stat_key"]: r["points"]
+           for r in con.execute("SELECT stat_key, points FROM scoring_config")}
     fetched_at = now.isoformat()
     n_calls, n_players, n_skipped = 0, 0, 0
     for season, week, game_id in games:
@@ -175,6 +177,29 @@ def _poll_games(con, games, key: str, now: datetime):
                 continue
             stats = {FIELD_MAP[k]: round(float(v), 2)
                      for k, v in d.items() if k in FIELD_MAP}
+            # Scoring events: diff against the stored totals so each stat
+            # increase becomes one "what just happened" notification. The
+            # UNIQUE(new_total) constraint dedupes the rare same-second race
+            # between the 1-min and 15-min pollers.
+            old = con.execute(
+                "SELECT * FROM live_stats WHERE player_id = ? AND season = ? AND week = ?",
+                (pid, season, week),
+            ).fetchone()
+            for c in STAT_COLS:
+                new_v = stats.get(c, 0)
+                old_v = (old[c] if old else 0) or 0
+                if new_v > old_v + 1e-9:
+                    pts = round((new_v - old_v) * cfg.get(c, 0), 2)
+                    if pts > 0:
+                        con.execute(
+                            "INSERT INTO scoring_events (player_id, season, week, stat_key, "
+                            "old_total, new_total, points_delta, game_id, created_at) "
+                            "VALUES (?,?,?,?,?,?,?,?,?) "
+                            "ON CONFLICT (player_id, season, week, stat_key, new_total) "
+                            "DO NOTHING",
+                            (pid, season, week, c, old_v, new_v, pts,
+                             game_id, fetched_at),
+                        )
             cols = ", ".join(STAT_COLS)
             vals = ", ".join(str(stats.get(c, 0)) for c in STAT_COLS)
             sets = ", ".join(f"{c}=excluded.{c}" for c in STAT_COLS)

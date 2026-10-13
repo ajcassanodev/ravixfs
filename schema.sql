@@ -153,3 +153,24 @@ CREATE TABLE IF NOT EXISTS tank01_usage (
   month TEXT NOT NULL PRIMARY KEY,
   calls INTEGER NOT NULL DEFAULT 0
 );
+
+-- Scoring events (Tank01 live scoring): one row per per-stat increase seen
+-- by the poller, powering the "what just happened" notification popups.
+-- The 1-min and 15-min pollers share live_stats as their high-water mark;
+-- UNIQUE(player_id, season, week, stat_key, new_total) makes the rare
+-- same-second race between them a harmless no-op instead of a duplicate.
+CREATE TABLE IF NOT EXISTS scoring_events (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  player_id     TEXT NOT NULL,
+  season        INTEGER NOT NULL,
+  week          INTEGER NOT NULL,
+  stat_key      TEXT NOT NULL,
+  old_total     REAL NOT NULL DEFAULT 0,
+  new_total     REAL NOT NULL DEFAULT 0,
+  points_delta  REAL NOT NULL DEFAULT 0,
+  game_id       TEXT NOT NULL DEFAULT '',
+  created_at    TEXT NOT NULL,
+  UNIQUE (player_id, season, week, stat_key, new_total)
+);
+CREATE INDEX IF NOT EXISTS idx_scoring_events_recent
+  ON scoring_events (season, week, created_at);

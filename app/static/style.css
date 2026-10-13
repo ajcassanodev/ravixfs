@@ -84,6 +84,24 @@ nav a:hover{color:var(--text);background:rgba(255,255,255,.05)}
 @media (prefers-reduced-motion:reduce){.ticker-item.bump,.ticker-item.bump .pts{animation:none}}
 .ticker-stamp{margin-left:8px;margin-right:24px;font-size:.78rem;color:var(--muted);opacity:.75}
 
+/* ---- Scoring-event toast popups (picked players only) ---- */
+#scoring-toasts{position:fixed;right:14px;bottom:14px;display:flex;flex-direction:column;gap:8px;z-index:60;width:min(300px,calc(100vw - 28px))}
+.scoring-toast{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--gold);border-radius:10px;padding:10px 12px;box-shadow:0 8px 24px rgba(0,0,0,.55);animation:toast-in .38s cubic-bezier(.2,.9,.3,1.15)}
+.scoring-toast.out{animation:toast-out .3s ease-in forwards}
+@keyframes toast-in{from{transform:translateX(110%);opacity:0}to{transform:none;opacity:1}}
+@keyframes toast-out{to{transform:translateX(110%);opacity:0}}
+.st-prow{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.st-pname{font-weight:700;color:var(--text);font-size:.92rem}
+.st-team{font-size:.68rem;font-weight:700;color:var(--cyan);background:var(--cyan-dim);padding:2px 6px;border-radius:5px;letter-spacing:.06em}
+.st-mine{font-size:.64rem;font-weight:700;letter-spacing:.08em;color:var(--green);background:rgba(74,222,128,.12);padding:2px 6px;border-radius:5px}
+.st-play{color:var(--silver);font-size:.88rem;margin-top:4px}
+.st-ptsrow{display:flex;justify-content:flex-end;margin-top:2px}
+.st-points{color:var(--gold);font-weight:700;font-size:1.05rem;font-variant-numeric:tabular-nums}
+.st-bar{height:2px;background:rgba(245,196,81,.22);border-radius:2px;margin-top:8px;overflow:hidden}
+.st-bar i{display:block;height:100%;background:var(--gold);animation:toast-bar 6s linear forwards}
+@keyframes toast-bar{from{width:100%}to{width:0}}
+@media (prefers-reduced-motion:reduce){.scoring-toast{animation:none}.st-bar i{animation:none}}
+
 /* ---- Standings cards ---- */
 .standings{display:flex;flex-direction:column;gap:10px;margin:1rem 0}
 .stand-card{

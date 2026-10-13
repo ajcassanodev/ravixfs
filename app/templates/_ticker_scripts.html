@@ -89,3 +89,74 @@
   setInterval(refresh, 5 * 60 * 1000);
 })();
 </script>
+{# Scoring-event toast popups: "what just happened" for picked players.
+   Polls /scoring-events.json; each new event pops a toast (name, team,
+   play, points, YOUR PICK badge for the viewer's own players). #}
+<script>
+(function () {
+  var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var box = null;
+  var lastSeen = null;  // seeded on load so history never pops
+  var STAT_LABELS = {
+    tackles: 'tackle', sacks: 'sack', interceptions: 'interception',
+    forced_fumbles: 'forced fumble', fumble_recoveries: 'fumble recovery',
+    safeties: 'safety', def_tds: 'defensive TD'
+  };
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  }
+
+  function describePlay(ev) {
+    var label = STAT_LABELS[ev.stat] || ev.stat;
+    if (ev.delta !== 1) {
+      if (ev.stat === 'tackles') return ev.delta + ' tackles';
+      return ev.delta + ' ' + label + 's';
+    }
+    return label.charAt(0).toUpperCase() + label.slice(1);
+  }
+
+  function dismiss(el) {
+    if (reduceMotion) {
+      if (el.parentNode) el.parentNode.removeChild(el);
+      return;
+    }
+    el.classList.add('out');
+    setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 320);
+  }
+
+  function showToast(ev) {
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'scoring-toasts';
+      document.body.appendChild(box);
+    }
+    var el = document.createElement('div');
+    el.className = 'scoring-toast';
+    el.innerHTML =
+      '<div class="st-prow"><span class="st-pname">' + esc(ev.player) + '</span>' +
+      '<span class="st-team">' + esc(ev.team || '') + '</span>' +
+      (ev.mine ? '<span class="st-mine">YOUR PICK</span>' : '') + '</div>' +
+      '<div class="st-play">' + esc(describePlay(ev)) + '</div>' +
+      '<div class="st-ptsrow"><span class="st-points">+' + Number(ev.points).toFixed(1) + '</span></div>' +
+      (reduceMotion ? '' : '<div class="st-bar"><i></i></div>');
+    box.insertBefore(el, box.firstChild);
+    while (box.children.length > 4) box.removeChild(box.lastChild);
+    setTimeout(function () { dismiss(el); }, 6000);
+  }
+
+  function poll() {
+    var url = '/scoring-events.json' + (lastSeen ? '?since=' + encodeURIComponent(lastSeen) : '');
+    fetch(url, {cache: 'no-store'}).then(function (r) {
+      if (!r.ok) throw new Error('bad status');
+      return r.json();
+    }).then(function (d) {
+      if (lastSeen !== null) (d.events || []).forEach(showToast);
+      if (d.now) lastSeen = d.now;
+    }).catch(function () { /* keep polling */ });
+  }
+
+  poll();  // seeds lastSeen; history never pops
+  setInterval(poll, 30 * 1000);
+})();
+</script>
