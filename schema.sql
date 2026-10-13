@@ -128,3 +128,28 @@ CREATE TABLE IF NOT EXISTS offense_stats (
   plays         REAL NOT NULL DEFAULT 0,
   PRIMARY KEY (season, week, team)
 );
+
+-- Live in-game defensive stats (Tank01). Per-player rows for the current
+-- week while games are in progress. app/scoring.py prefers nflverse
+-- weekly_stats whenever a final row exists; live_stats only fills the gap.
+CREATE TABLE IF NOT EXISTS live_stats (
+  player_id       TEXT NOT NULL,
+  season          INTEGER NOT NULL,
+  week            INTEGER NOT NULL,
+  tackles         REAL NOT NULL DEFAULT 0,
+  sacks           REAL NOT NULL DEFAULT 0,
+  interceptions   REAL NOT NULL DEFAULT 0,
+  forced_fumbles  REAL NOT NULL DEFAULT 0,
+  fumble_recoveries REAL NOT NULL DEFAULT 0,
+  safeties        REAL NOT NULL DEFAULT 0,
+  def_tds         REAL NOT NULL DEFAULT 0,
+  game_id         TEXT NOT NULL DEFAULT '',
+  fetched_at      TEXT NOT NULL DEFAULT '',
+  PRIMARY KEY (player_id, season, week)
+);
+
+-- Tank01 API call budget guard (free tier: 1,000 req/month).
+CREATE TABLE IF NOT EXISTS tank01_usage (
+  month TEXT NOT NULL PRIMARY KEY,
+  calls INTEGER NOT NULL DEFAULT 0
+);

@@ -102,8 +102,22 @@ def _ticker_data(con, season: int, include_test: bool = False) -> dict:
         "SELECT MAX(week) AS w FROM weekly_stats WHERE season = ?", (season,)
     ).fetchone()
     week = wrow["w"] or 0
+    pick_week = _db.current_pick_week(con, season)
     if not week:
-        week = _db.current_pick_week(con, season)
+        week = pick_week
+    elif pick_week != week:
+        # Live scoring: while the pick week's games are in progress (or
+        # before the batch feed publishes), its live_stats rows are fresher
+        # than last week's finals.
+        try:
+            has_live = con.execute(
+                "SELECT 1 FROM live_stats WHERE season = ? AND week = ? LIMIT 1",
+                (season, pick_week),
+            ).fetchone()
+        except Exception:
+            has_live = None  # live_stats table predates this deploy
+        if has_live:
+            week = pick_week
     entries = []
     where = "" if include_test else "WHERE COALESCE(is_test, 0) = 0 "
     for m in con.execute(

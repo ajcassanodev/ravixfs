@@ -273,6 +273,17 @@ def main(check: bool = False):
             # Trial must never break the stats poll.
             print(f"tank01 trial skipped: {exc}")
 
+    # ---- Tank01 live scoring: in-progress games -> live_stats ----
+    # Rides the 15-min timer; safe no-op without TANK01_API_KEY, with no
+    # live games, or past the monthly call budget. Never breaks the poll.
+    if not check:
+        try:
+            sys.path.insert(0, os.path.dirname(__file__))
+            import tank01_live as _tlive
+            print(_tlive.run_live(con))
+        except Exception as exc:
+            print(f"tank01 live skipped: {exc}")
+
     con.close()
     print("check mode: no writes" if check else "done")
 

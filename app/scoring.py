@@ -20,11 +20,25 @@ def scoring_map(con) -> dict:
 
 
 def player_week_points(con, player_id: str, season: int, week: int):
-    """(points, {stat: value}) for one player-week. Missing stats row -> 0."""
+    """(points, {stat: value}) for one player-week. Missing stats row -> 0.
+
+    Source precedence: nflverse weekly_stats wins whenever a final row exists;
+    Tank01 live_stats fills the gap while games are in progress (or before
+    the batch feed publishes). Everything downstream (ticker, standings,
+    member pages) picks up live numbers automatically.
+    """
     row = con.execute(
         "SELECT * FROM weekly_stats WHERE player_id = ? AND season = ? AND week = ?",
         (player_id, season, week),
     ).fetchone()
+    if row is None:
+        try:
+            row = con.execute(
+                "SELECT * FROM live_stats WHERE player_id = ? AND season = ? AND week = ?",
+                (player_id, season, week),
+            ).fetchone()
+        except Exception:
+            row = None  # live_stats table predates this deploy
     cfg = scoring_map(con)
     if not row:
         return 0.0, {k: 0 for k in STAT_KEYS}
