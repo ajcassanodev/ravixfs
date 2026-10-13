@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}{{ member_name }}'s Dashboard — Week {{ week }}{% endblock %}
+{% block ticker %}{% include "_ticker.html" %}{% endblock %}
+{% block content %}
+<div class="dash">
+  <div class="dash-head">
+    <div>
+      <div class="dash-eyebrow">PRIME5 · TEST SEASON</div>
+      <h2 class="dash-title">{{ member_name }}'s Dashboard</h2>
+    </div>
+    <div class="dash-live{% if not week_live %} idle{% endif %}">
+      {% if week_live %}<span class="live-dot"></span>{% endif %}WEEK {{ week }}{% if week_live %} · LIVE{% endif %}
+    </div>
+  </div>
+
+  <div class="dash-rank">
+    <div class="dash-place">#{{ rank or "–" }}</div>
+    <div>
+      <div class="dash-pts">{{ "%.1f"|format(total or 0) }} <span>pts</span></div>
+      <div class="dash-gap">
+        {% if rank == 1 %}Leading the league
+        {% elif gap and gap > 0 %}{{ "%.1f"|format(gap) }} behind {{ leader_name }}
+        {% else %}Tied at the top{% endif %}
+      </div>
+    </div>
+    {% if next_lock %}
+    <div class="dash-next">Next lock<br><b>{{ next_lock.matchup }} · {{ next_lock.label }}</b></div>
+    {% endif %}
+  </div>
+
+  <div class="dash-grid">
+    <div class="dash-card">
+      <div class="dash-cardt">SEASON POINTS — WHERE THEY COME FROM</div>
+      <div class="dash-donutwrap"><div id="dash-d1"></div><div class="dash-legend" id="dash-l1"></div></div>
+    </div>
+    <div class="dash-card">
+      <div class="dash-cardt">THIS WEEK — WHERE THEY COME FROM</div>
+      <div class="dash-donutwrap"><div id="dash-d2"></div><div class="dash-legend" id="dash-l2"></div></div>
+    </div>
+  </div>
+
+  <div class="dash-card">
+    <div class="dash-cardt">MY PICKS — WEEK {{ week }}</div>
+    {% for p in picks %}
+    <div class="dash-pick">
+      <span class="dash-pname">{{ p.name }}</span>
+      <span class="dash-tag{% if p.src == 'locked' %} lock{% endif %}">{{ p.src|upper }}</span>
+      <span class="dash-team">{{ p.team }}</span>
+      <span class="gstatus g-{{ p.status }}">{{ p.label }}</span>
+      <span class="dash-ppts">{{ "%.1f"|format(p.points) }}</span>
+    </div>
+    {% else %}
+    <p class="muted">No picks yet this week.</p>
+    {% endfor %}
+  </div>
+
+  <div class="dash-grid">
+    <div class="dash-card">
+      <div class="dash-cardt">TOP PERFORMERS — WEEK {{ week }}</div>
+      {% for t in top4 %}
+      <div class="dash-toprow">
+        <span class="dash-trank">{{ loop.index }}</span>
+        <span class="dash-pname">{{ t.name }}</span>
+        <span class="dash-team">{{ t.team }}</span>
+        <span class="dash-ppts" style="margin-left:auto">{{ "%.1f"|format(t.points) }}</span>
+      </div>
+      {% else %}
+      <p class="muted">No games scored yet.</p>
+      {% endfor %}
+    </div>
+    <div class="dash-card">
+      <div class="dash-cardt">WEEKLY TREND</div>
+      <div class="dash-bars" id="dash-bars"></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+{% include "_ticker_scripts.html" %}
+<script>
+(function () {
+  var palette = ['#45c2ff', '#f5c451', '#4ade80', '#c7d2e0', '#d08a4e', '#a78bfa', '#fb923c', '#f472b6'];
+  function donut(svgId, legId, data) {
+    var svgEl = document.getElementById(svgId), legEl = document.getElementById(legId);
+    if (!svgEl || !legEl) return;
+    var total = data.reduce(function (a, s) { return a + s.points; }, 0);
+    if (!data.length || total <= 0) {
+      legEl.innerHTML = '<p class="muted" style="margin:0">No points yet.</p>';
+      return;
+    }
+    var acc = 0, circles = '';
+    data.forEach(function (s, i) {
+      var color = palette[i % palette.length];
+      var frac = s.points / total;
+      circles += '<circle cx="70" cy="70" r="54" fill="none" stroke="' + color +
+        '" stroke-width="20" pathLength="100" stroke-dasharray="' + (frac * 100).toFixed(2) +
+        ' 100" stroke-dashoffset="' + (25 - acc * 100).toFixed(2) + '"/>';
+      acc += frac;
+      s._color = color;
+    });
+    svgEl.innerHTML = '<svg viewBox="0 0 140 140" width="118" height="118">' + circles +
+      '<text x="70" y="68" text-anchor="middle" fill="#eef3f8" font-size="21" font-weight="700">' +
+      total.toFixed(1) + '</text>' +
+      '<text x="70" y="88" text-anchor="middle" fill="#9aa7b8" font-size="11">pts</text></svg>';
+    legEl.innerHTML = data.map(function (s) {
+      return '<div class="dash-leg"><span class="dash-sw" style="background:' + s._color + '"></span>' +
+        s.name + '<b>' + s.points.toFixed(1) + '</b></div>';
+    }).join('');
+  }
+  donut('dash-d1', 'dash-l1', {{ season_pie|tojson }});
+  donut('dash-d2', 'dash-l2', {{ week_pie|tojson }});
+
+  var trend = {{ trend|tojson }};
+  var barsEl = document.getElementById('dash-bars');
+  if (barsEl) {
+    if (!trend.length) {
+      barsEl.innerHTML = '<p class="muted" style="margin:0">No weeks yet.</p>';
+    } else {
+      var mx = Math.max.apply(null, trend.map(function (t) { return t.points; }).concat([1]));
+      var isLive = {{ 'true' if week_live else 'false' }};
+      barsEl.innerHTML = trend.map(function (t, i) {
+        var h = Math.max(4, Math.round(t.points / mx * 72));
+        var live = isLive && i === trend.length - 1;
+        return '<div class="dash-barcol"><span class="dash-bv">' + t.points.toFixed(1) + '</span>' +
+          '<div class="dash-bar' + (live ? ' live' : '') + '" style="height:' + h + 'px"></div>' +
+          '<span class="dash-bw">W' + t.week + '</span></div>';
+      }).join('');
+    }
+  }
+})();
+</script>
+{% endblock %}

@@ -84,6 +84,49 @@ nav a:hover{color:var(--text);background:rgba(255,255,255,.05)}
 @media (prefers-reduced-motion:reduce){.ticker-item.bump,.ticker-item.bump .pts{animation:none}}
 .ticker-stamp{margin-left:8px;margin-right:24px;font-size:.78rem;color:var(--muted);opacity:.75}
 
+/* ---- Member dashboard ---- */
+.dash{max-width:960px;margin:0 auto}
+.dash-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.dash-eyebrow{font-size:.68rem;font-weight:700;letter-spacing:.22em;color:var(--muted)}
+.dash-title{margin:2px 0 0;font-size:1.4rem}
+.dash-live{display:inline-flex;align-items:center;gap:7px;font-size:.74rem;font-weight:700;letter-spacing:.12em;color:var(--green);background:rgba(74,222,128,.1);padding:6px 12px;border-radius:20px}
+.dash-live.idle{color:var(--muted);background:rgba(154,167,184,.1)}
+.dash-rank{display:flex;align-items:center;gap:16px;padding:14px 16px;margin-bottom:14px;background:var(--card);border:1px solid var(--line);border-radius:12px;flex-wrap:wrap}
+.dash-place{font-size:2.4rem;font-weight:800;color:var(--gold);line-height:1}
+.dash-pts{font-size:1.3rem;font-weight:700}
+.dash-pts span{font-size:.85rem;color:var(--muted);font-weight:500}
+.dash-gap{font-size:.82rem;color:var(--muted);margin-top:2px}
+.dash-next{margin-left:auto;font-size:.78rem;color:var(--muted);text-align:right}
+.dash-next b{color:var(--text)}
+.dash-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+.dash-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:14px}
+.dash-grid .dash-card{margin-bottom:0}
+.dash-cardt{font-size:.7rem;font-weight:700;letter-spacing:.14em;color:var(--muted);margin-bottom:10px}
+.dash-donutwrap{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.dash-legend{display:flex;flex-direction:column;gap:6px;font-size:.8rem;min-width:150px;flex:1}
+.dash-leg{display:flex;align-items:center;gap:8px;color:var(--silver)}
+.dash-sw{width:10px;height:10px;border-radius:3px;flex:none}
+.dash-leg b{margin-left:auto;color:var(--text);font-variant-numeric:tabular-nums;padding-left:12px}
+.dash-pick{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);font-size:.88rem;flex-wrap:wrap}
+.dash-pick:last-child{border-bottom:none}
+.dash-pname{font-weight:600;color:var(--text)}
+.dash-tag{font-size:.62rem;font-weight:700;letter-spacing:.08em;padding:2px 7px;border-radius:5px;background:var(--cyan-dim);color:var(--cyan)}
+.dash-tag.lock{background:rgba(245,196,81,.12);color:var(--gold)}
+.dash-team{font-size:.72rem;color:var(--muted)}
+.dash-pick .gstatus{margin-left:auto}
+.dash-ppts{font-weight:700;color:var(--cyan);font-variant-numeric:tabular-nums;min-width:36px;text-align:right}
+.dash-toprow{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:.88rem}
+.dash-toprow:last-child{border-bottom:none}
+.dash-trank{width:22px;height:22px;border-radius:50%;background:var(--cyan-dim);color:var(--cyan);font-size:.72rem;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex:none}
+.dash-toprow:first-child .dash-trank{background:rgba(245,196,81,.16);color:var(--gold)}
+.dash-bars{display:flex;align-items:flex-end;gap:10px;min-height:110px;padding-top:6px}
+.dash-barcol{display:flex;flex-direction:column;align-items:center;gap:6px;flex:1}
+.dash-bar{width:100%;max-width:44px;border-radius:5px 5px 2px 2px;background:linear-gradient(180deg,var(--cyan),rgba(69,194,255,.35));min-height:4px}
+.dash-bar.live{background:linear-gradient(180deg,var(--green),rgba(74,222,128,.35))}
+.dash-bw{font-size:.7rem;color:var(--muted)}
+.dash-bv{font-size:.74rem;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums}
+@media(max-width:640px){.dash-grid{grid-template-columns:1fr}}
+
 /* ---- Scoring-event toast popups (picked players only) ---- */
 #scoring-toasts{position:fixed;right:14px;bottom:14px;display:flex;flex-direction:column;gap:8px;z-index:60;width:min(300px,calc(100vw - 28px))}
 .scoring-toast{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--gold);border-radius:10px;padding:10px 12px;box-shadow:0 8px 24px rgba(0,0,0,.55);animation:toast-in .38s cubic-bezier(.2,.9,.3,1.15)}

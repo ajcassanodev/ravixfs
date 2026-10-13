@@ -159,6 +159,149 @@ def ticker_json(request: Request):
     return JSONResponse(data)
 
 
+def _dashboard_context(con, request):
+    """Dashboard context for a signed-in member, or None.
+
+    Signed in = pick-link session cookie resolves to a members row.
+    Rank includes the live week when it has data (same as the ticker).
+    """
+    try:
+        sm = _identity.session_member(request)
+        token = sm["pick_token"] if sm and sm["pick_token"] else None
+    except Exception:
+        token = None
+    if not token:
+        return None
+    m = con.execute(
+        "SELECT * FROM members WHERE pick_token = ?", (token,)).fetchone()
+    if not m:
+        return None
+    mid = m["id"]
+    season = _db.current_season(con)
+    pick_week = _db.current_pick_week(con, season)
+    wrow = con.execute(
+        "SELECT MAX(week) AS w FROM weekly_stats WHERE season = ?", (season,)).fetchone()
+    try:
+        lrow = con.execute(
+            "SELECT MAX(week) AS w FROM live_stats WHERE season = ?", (season,)).fetchone()
+        live_max = lrow["w"] or 0
+    except Exception:
+        live_max = 0
+    through_week = max(wrow["w"] or 0, live_max)
+
+    # Rank (same table the standings page would put them in).
+    table_now, test_table = scoring.standings(con, season, through_week)
+    table = test_table if m["is_test"] else table_now
+    rank = total = None
+    leader_name, leader_total = "", 0.0
+    for i, (tmid, tname, ttotal) in enumerate(table):
+        if i == 0:
+            leader_name, leader_total = tname, ttotal
+        if tmid == mid:
+            rank, total = i + 1, ttotal
+
+    # Season pie: per-player points across the ranked weeks.
+    season_by_player = {}
+    for w in range(1, through_week + 1):
+        _, lines = scoring.member_week_points(con, mid, season, w)
+        for pid, pname, pteam, _src, pts, _st in lines:
+            d = season_by_player.setdefault(
+                pid, {"name": pname, "team": pteam, "points": 0.0})
+            d["points"] = round(d["points"] + pts, 2)
+    season_pie = sorted(season_by_player.values(),
+                        key=lambda d: d["points"], reverse=True)
+
+    # This week: picks with live game status.
+    week_total, lines = scoring.member_week_points(con, mid, season, pick_week)
+    states = _gamestate.fetch_states()
+    now = datetime.now(timezone.utc)
+    picks, next_lock = [], None
+    for pid, pname, pteam, src, pts, _st in lines:
+        game = _gamestate.player_game(pteam, states)
+        if game is None:
+            status, label = "bye", "Bye"
+        elif game["state"] == "in":
+            status, label = "live", _gamestate.live_label(game)
+        elif game["state"] == "post":
+            status, label = "final", game["detail"] or "Final"
+        else:
+            ko = _db.player_kickoff(con, pid, season, pick_week)
+            label = _et_kickoff_label(ko) if ko else (game["detail"] or "Scheduled")
+            status = "upcoming"
+        picks.append({"name": pname, "team": pteam, "src": src,
+                      "points": pts, "status": status, "label": label})
+        ko = _db.player_kickoff(con, pid, season, pick_week)
+        if ko:
+            kdt = datetime.fromisoformat(ko)
+            if kdt.tzinfo is None:
+                kdt = kdt.replace(tzinfo=timezone.utc)
+            if kdt > now and (next_lock is None or kdt < next_lock[0]):
+                g = con.execute(
+                    "SELECT away_team, home_team FROM games WHERE season = ? "
+                    "AND week = ? AND (away_team = ? OR home_team = ?) LIMIT 1",
+                    (season, pick_week, pteam, pteam)).fetchone()
+                matchup = f"{g['away_team']} @ {g['home_team']}" if g else pteam
+                next_lock = (kdt, {"matchup": matchup,
+                                   "label": _et_kickoff_label(ko)})
+    week_live = any(p["status"] == "live" for p in picks)
+    week_pie = sorted(
+        ({"name": p["name"], "team": p["team"], "points": p["points"]}
+         for p in picks),
+        key=lambda d: d["points"], reverse=True)
+
+    # Top 4 performers league-wide this week.
+    try:
+        pids = [r["player_id"] for r in con.execute(
+            "SELECT player_id FROM weekly_stats WHERE season = ? AND week = ? "
+            "UNION SELECT player_id FROM live_stats WHERE season = ? AND week = ?",
+            (season, pick_week, season, pick_week))]
+    except Exception:
+        pids = [r["player_id"] for r in con.execute(
+            "SELECT player_id FROM weekly_stats WHERE season = ? AND week = ?",
+            (season, pick_week))]
+    perf = []
+    for pid in pids:
+        pts, _ = scoring.player_week_points(con, pid, season, pick_week)
+        prow = con.execute(
+            "SELECT name, team FROM players WHERE player_id = ?", (pid,)).fetchone()
+        if prow:
+            perf.append({"name": prow["name"], "team": prow["team"],
+                         "points": pts})
+    perf.sort(key=lambda r: (-r["points"], r["name"]))
+    top4 = perf[:4]
+
+    # Weekly trend.
+    trend = []
+    for w in range(1, pick_week + 1):
+        t, _ = scoring.member_week_points(con, mid, season, w)
+        trend.append({"week": w, "points": t})
+
+    return {
+        "member_name": m["name"], "season": season, "week": pick_week,
+        "week_live": week_live, "rank": rank, "total": total,
+        "leader_name": leader_name, "leader_total": leader_total,
+        "gap": round(leader_total - (total or 0), 2),
+        "season_pie": season_pie, "week_pie": week_pie,
+        "week_total": week_total, "picks": picks,
+        "top4": top4, "trend": trend,
+        "next_lock": next_lock[1] if next_lock else None,
+        "ticker": _ticker_data(
+            con, season,
+            include_test=_is_staging_host(request.headers.get("host", ""))),
+    }
+
+
+@app.get("/dashboard", response_class=HTMLResponse)
+def dashboard(request: Request):
+    con = _db.connect()
+    ctx = _dashboard_context(con, request)
+    con.close()
+    if ctx is None:
+        return RedirectResponse("/", status_code=303)
+    return templates.TemplateResponse(
+        request, "dashboard.html", {"request": request, **ctx})
+
+
 @app.get("/scoring-events.json")
 def scoring_events_json(request: Request, since: str = ""):
     """Recent scoring plays for picked players, for the notification popups.
@@ -222,6 +365,11 @@ def scoring_events_json(request: Request, since: str = ""):
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
     con = _db.connect()
+    dash = _dashboard_context(con, request)
+    if dash is not None:
+        con.close()
+        return templates.TemplateResponse(
+            request, "dashboard.html", {"request": request, **dash})
     season = _db.current_season(con)
     wrow = con.execute(
         "SELECT MAX(week) AS w FROM weekly_stats WHERE season = ?", (season,)
