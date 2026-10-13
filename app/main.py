@@ -213,7 +213,7 @@ def _dashboard_context(con, request):
 
     # This week: picks with live game status.
     week_total, lines = scoring.member_week_points(con, mid, season, pick_week)
-    states = _gamestate.fetch_states()
+    states = _gamestate.fetch_states(pick_week)
     now = datetime.now(timezone.utc)
     picks, next_lock = [], None
     for pid, pname, pteam, src, pts, _st in lines:
@@ -447,7 +447,7 @@ def live_view(request: Request):
     con = _db.connect()
     season = _db.current_season(con)
     week = _db.current_pick_week(con, season)
-    states = _gamestate.fetch_states()
+    states = _gamestate.fetch_states(week)
     feed_down = not states
     members = []
     live_count = 0

@@ -16,22 +16,32 @@ _TIMEOUT = 8
 # Sleeper/DB abbreviation -> ESPN abbreviation.
 _TEAM_FIX = {"WAS": "WSH", "LA": "LAR"}
 
-_cache = {"at": 0.0, "states": {}}
+_cache: dict = {}  # week -> {"at": float, "states": dict}
 
 
 def _espn_abbr(team: str) -> str:
     return _TEAM_FIX.get((team or "").upper(), (team or "").upper())
 
 
-def fetch_states() -> dict:
+def fetch_states(week: int | None = None) -> dict:
     """{ESPN_TEAM_ABBR: {"state": "pre"|"in"|"post", "detail": str,
-    "period": int, "clock": str}} — cached 60s, empty dict on failure."""
+    "period": int, "clock": str}} — cached 60s per week, empty dict on failure.
+
+    The week is passed explicitly: ESPN's default scoreboard lags between
+    weeks (e.g. still showing last week's finals on Tuesday), which used to
+    make the /live page show stale "Final" badges for the upcoming week.
+    """
+    key = week or 0
     now = time.time()
-    if now - _cache["at"] < _TTL and _cache["states"]:
-        return _cache["states"]
+    hit = _cache.get(key)
+    if hit and now - hit["at"] < _TTL and hit["states"]:
+        return hit["states"]
     try:
+        url = _SCOREBOARD_URL
+        if week:
+            url += f"?seasontype=2&week={int(week)}"
         req = urllib.request.Request(
-            _SCOREBOARD_URL, headers={"User-Agent": "ravixfs-live/1.0"}
+            url, headers={"User-Agent": "ravixfs-live/1.0"}
         )
         with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:
             data = json.loads(resp.read().decode("utf-8"))
@@ -54,12 +64,12 @@ def fetch_states() -> dict:
                         "period": status.get("period", 0) or 0,
                         "clock": status.get("displayClock", "") or "",
                     }
-        _cache["at"] = now
-        _cache["states"] = states
+        _cache[key] = {"at": now, "states": states}
         return states
     except Exception:
         # Serve stale cache if we have it, else empty (caller falls back).
-        return _cache["states"]
+        hit = _cache.get(key)
+        return hit["states"] if hit else {}
 
 
 def player_game(team: str, states: dict) -> dict | None:
