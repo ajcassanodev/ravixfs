@@ -113,7 +113,7 @@ nav a:hover{color:var(--text);background:rgba(255,255,255,.05)}
 .dash-tag{font-size:.62rem;font-weight:700;letter-spacing:.08em;padding:2px 7px;border-radius:5px;background:var(--cyan-dim);color:var(--cyan)}
 .dash-tag.lock{background:rgba(245,196,81,.12);color:var(--gold)}
 .dash-team{font-size:.72rem;color:var(--muted)}
-.dash-pick .gstatus{margin-left:auto}
+.dash-pright{margin-left:auto;display:inline-flex;align-items:center;gap:10px}
 .dash-ppts{font-weight:700;color:var(--cyan);font-variant-numeric:tabular-nums;min-width:36px;text-align:right}
 .dash-toprow{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:.88rem}
 .dash-toprow:last-child{border-bottom:none}

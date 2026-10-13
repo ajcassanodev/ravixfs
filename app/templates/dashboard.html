@@ -46,8 +46,7 @@
       <span class="dash-pname">{{ p.name }}</span>
       <span class="dash-tag{% if p.src == 'locked' %} lock{% endif %}">{{ p.src|upper }}</span>
       <span class="dash-team">{{ p.team }}</span>
-      <span class="gstatus g-{{ p.status }}">{{ p.label }}</span>
-      <span class="dash-ppts">{{ "%.1f"|format(p.points) }}</span>
+      <span class="dash-pright"><span class="gstatus g-{{ p.status }}">{{ p.label }}</span><span class="dash-ppts">{{ "%.1f"|format(p.points) }}</span></span>
     </div>
     {% else %}
     <p class="muted">No picks yet this week.</p>
