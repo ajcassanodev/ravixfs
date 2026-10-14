@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Release notes{% endblock %}
+{% block content %}
+<h2>Release notes</h2>
+<p class="note">Every version, newest first. The banner on the site always shows the latest one.</p>
+{% for r in releases %}
+<div class="release-entry">
+  <div class="release-entry-head">
+    <span class="release-version">v{{ r.version }}</span>
+    <span class="release-date">{{ r.date }}</span>
+    {% if loop.first %}<span class="release-tag">Latest</span>{% endif %}
+  </div>
+  <h3 class="release-entry-title">{{ r.title }}</h3>
+  {% if r.notes %}
+  <ul class="release-entry-notes">
+    {% for n in r.notes %}<li>{{ n }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+</div>
+{% else %}
+<p class="note">No releases yet.</p>
+{% endfor %}
+{% endblock %}

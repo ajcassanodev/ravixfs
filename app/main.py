@@ -41,23 +41,26 @@ except OSError:
 templates.env.globals["css_version"] = _CSS_VERSION
 
 
-def _load_release():
-    """Release banner content from app/release.json, or None.
+def _load_releases():
+    """Full release history from app/releases.json, newest first.
 
-    Bump version + notes on each release; the banner reappears because
-    dismiss is stored per-version in the browser.
+    To ship a new version: prepend one entry (version, date, title,
+    notes). The banner automatically shows the first entry; /releases
+    shows the whole history. No other file needs to change.
     """
     try:
-        with open(os.path.join(BASE, "release.json"), encoding="utf-8") as f:
+        with open(os.path.join(BASE, "releases.json"), encoding="utf-8") as f:
             data = json.load(f)
-        if isinstance(data, dict) and data.get("version") and data.get("title"):
-            return data
+        if isinstance(data, list):
+            return [r for r in data
+                    if isinstance(r, dict) and r.get("version") and r.get("title")]
     except Exception:
         pass
-    return None
+    return []
 
 
-RELEASE = _load_release()
+RELEASES = _load_releases()
+RELEASE = RELEASES[0] if RELEASES else None
 templates.env.globals["release"] = RELEASE
 
 
@@ -715,6 +718,14 @@ def trade_log(request: Request):
 @app.get("/guide", response_class=HTMLResponse)
 def guide(request: Request):
     return templates.TemplateResponse(request, "guide.html", {"request": request})
+
+
+@app.get("/releases", response_class=HTMLResponse)
+def releases_page(request: Request):
+    """Release notes for every version, newest first."""
+    return templates.TemplateResponse(request, "releases.html", {
+        "request": request, "releases": RELEASES,
+    })
 
 
 @app.get("/submit/{token}", response_class=HTMLResponse)

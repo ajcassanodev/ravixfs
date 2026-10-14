@@ -52,6 +52,15 @@ nav a{color:var(--muted);text-decoration:none;font-weight:500;font-size:.95rem;
   padding:.45rem .75rem;border-radius:8px}
 nav a:hover{color:var(--text);background:rgba(255,255,255,.05)}
 
+/* ---- Release notes page ---- */
+.release-entry{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin:14px 0}
+.release-entry-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.release-version{font-family:'Space Grotesk',sans-serif;font-weight:700;color:var(--cyan)}
+.release-date{font-size:.82rem;color:var(--muted)}
+.release-entry-title{margin:8px 0 6px}
+.release-entry-notes{margin-left:18px;color:var(--silver);font-size:.92rem}
+.release-entry-notes li{margin:3px 0}
+
 /* ---- Release banner ---- */
 .release-banner{background:rgba(245,196,81,.10);border-bottom:1px solid rgba(245,196,81,.35);position:relative;z-index:1}
 .release-banner-inner{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-top:9px;padding-bottom:9px}
