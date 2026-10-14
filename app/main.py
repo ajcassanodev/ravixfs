@@ -470,6 +470,7 @@ def _dashboard_context(con, request):
 
     return {
         "member_name": m["name"], "season": season, "week": pick_week,
+        "token": token, "member": m,
         "week_live": week_live, "rank": rank, "total": total,
         "leader_name": leader_name, "leader_total": leader_total,
         "gap": round(leader_total - (total or 0), 2),
@@ -546,9 +547,8 @@ def scoring_events_json(request: Request, since: str = ""):
         con.close()
 
 
-@app.get("/", response_class=HTMLResponse)
-def index(request: Request):
-    con = _db.connect()
+def _standings_context(con, request):
+    """Standings rows with behind-leader and avg/week, plus ticker."""
     season = _db.current_season(con)
     wrow = con.execute(
         "SELECT MAX(week) AS w FROM weekly_stats WHERE season = ?", (season,)
@@ -579,13 +579,39 @@ def index(request: Request):
             "behind": round(leader_total - total, 2),
             "avg": round(total / through_week, 2) if through_week else 0.0,
         })
-    ticker = _ticker_data(con, season, include_test=_is_staging_host(request.headers.get("host", "")))
-    cfg = scoring.scoring_map(con)
+    return {
+        "season": season, "standings": standings,
+        "test_table": test_table,
+        "ticker": _ticker_data(
+            con, season,
+            include_test=_is_staging_host(request.headers.get("host", ""))),
+        "through_week": through_week, "scoring": scoring.scoring_map(con),
+    }
+
+
+@app.get("/", response_class=HTMLResponse)
+def index(request: Request):
+    con = _db.connect()
+    dash = _dashboard_context(con, request)
+    if dash is not None:
+        con.close()
+        return templates.TemplateResponse(
+            request, "dashboard.html", {"request": request, **dash})
+    ctx = _standings_context(con, request)
     con.close()
     return templates.TemplateResponse(request, "index.html", {
-        "request": request, "season": season, "standings": standings,
-        "test_table": test_table, "ticker": ticker,
-        "through_week": through_week, "scoring": cfg,
+        "request": request, **ctx,
+    })
+
+
+@app.get("/standings", response_class=HTMLResponse)
+def standings_page(request: Request):
+    """The standings, always -- even for signed-in members."""
+    con = _db.connect()
+    ctx = _standings_context(con, request)
+    con.close()
+    return templates.TemplateResponse(request, "index.html", {
+        "request": request, **ctx,
     })
 
 
@@ -676,37 +702,16 @@ def releases_page(request: Request):
 
 @app.get("/submit/{token}", response_class=HTMLResponse)
 def submit_form(request: Request, token: str):
-    """My-picks summary for a member's pick link.
-
-    Picks themselves are made on /projections now; this page shows the
-    current week's picks with their lock status, plus reminder settings.
-    Opening it still establishes the member's session (and the staging
-    fallback cookie).
+    """Personal pick link: establish the member's session, then send them
+    to their dashboard (the member home page). Picks are made on
+    /projections; reminder settings live on the dashboard.
     """
     con = _db.connect()
     m = con.execute("SELECT * FROM members WHERE pick_token = ?", (token,)).fetchone()
-    if not m:
-        con.close()
-        raise HTTPException(404, "bad pick link")
-    season = _db.current_season(con)
-    week = _db.current_pick_week(con, season)
-    existing = con.execute(
-        "SELECT wp.player_id, p.name, p.team FROM weekly_picks wp "
-        "JOIN players p ON p.player_id = wp.player_id "
-        "WHERE wp.member_id = ? AND wp.season = ? AND wp.week = ?",
-        (m["id"], season, week),
-    ).fetchall()
-    picks = []
-    for e in existing:
-        ko = _db.player_kickoff(con, e["player_id"], season, week)
-        picks.append({"name": e["name"], "team": e["team"],
-                      "started": _ko_started(ko) if ko else False,
-                      "ko_label": _et_kickoff_label(ko) if ko else "Bye"})
     con.close()
-    resp = templates.TemplateResponse(request, "submit.html", {
-        "request": request, "member": m, "season": season, "week": week,
-        "picks": picks, "token": token,
-    })
+    if not m:
+        raise HTTPException(404, "bad pick link")
+    resp = RedirectResponse("/dashboard", status_code=302)
     _establish_session(resp, request, m)
     # Staging fallback: opening the pick link unlocks staging even when
     # the shared session secret isn't configured on the server.
@@ -727,7 +732,7 @@ def pick_redirect(request: Request):
 @app.post("/submit/{token}/reminders")
 def save_reminders(token: str, phone: str = Form(""), sms_opt_in: str = Form(""),
                    email: str = Form(""), email_opt_in: str = Form("")):
-    """Save a member's SMS/email reminder settings from their picks page."""
+    """Save a member's SMS/email reminder settings from their dashboard."""
     con = _db.connect()
     m = con.execute("SELECT * FROM members WHERE pick_token = ?", (token,)).fetchone()
     if not m:
@@ -738,20 +743,20 @@ def save_reminders(token: str, phone: str = Form(""), sms_opt_in: str = Form("")
     e164 = _sms.normalize_phone(phone) if phone else None
     if opt_in and phone and not e164:
         con.close()
-        return RedirectResponse(f"/submit/{token}?reminders=badphone", status_code=303)
+        return RedirectResponse(f"/dashboard?reminders=badphone", status_code=303)
     email = (email or "").strip()
     email_opt = 1 if email_opt_in == "1" else 0
     clean_email = _emailer.valid_email(email) if email else None
     if email_opt and email and not clean_email:
         con.close()
-        return RedirectResponse(f"/submit/{token}?reminders=bademail", status_code=303)
+        return RedirectResponse(f"/dashboard?reminders=bademail", status_code=303)
     con.execute(
         "UPDATE members SET phone = ?, sms_opt_in = ?, email = ?, email_opt_in = ? WHERE id = ?",
         (e164, opt_in, clean_email, email_opt, m["id"]),
     )
     con.commit()
     con.close()
-    return RedirectResponse(f"/submit/{token}?reminders=saved", status_code=303)
+    return RedirectResponse(f"/dashboard?reminders=saved", status_code=303)
 
 
 # ---------------- admin ----------------
