@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Staging locked · Ravix</title>
+<link rel="icon" href="/static/logo.png">
+<link rel="stylesheet" href="/static/style.css?v={{ css_version }}">
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <a class="brand" href="/unlock">
+      <img src="/static/logo.png" alt="Ravix logo">
+      <span class="brand-text"><span>RAVIX <em>FANTASY SPORTS</em></span><small>Staging</small></span>
+    </a>
+  </div>
+</header>
+<main>
+  <div class="wrap">
+    <div class="lock-card">
+      <h2>Staging is locked</h2>
+      <p class="note">This is the test site. Enter the staging key to continue.</p>
+      {% if error %}
+      <p class="err">That key didn't match. Try again.</p>
+      {% endif %}
+      <form method="post" action="/unlock">
+        <input type="hidden" name="next" value="{{ next_url }}">
+        <label for="lock-key">Staging key</label><br>
+        <input id="lock-key" name="key" type="password" autocomplete="off" autofocus required>
+        <button type="submit">Unlock staging</button>
+      </form>
+      <p class="note">Tip: you can also open a link with <code>?key=YOUR-KEY</code> once and it stays unlocked on this browser for 30 days.</p>
+    </div>
+  </div>
+</main>
+</body>
+</html>

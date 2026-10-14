@@ -29,6 +29,35 @@
   </div>
 </header>
 {% block ticker %}{% endblock %}
+{% if release %}
+<div class="release-banner" data-version="{{ release.version }}" hidden>
+  <div class="wrap release-banner-inner">
+    <span class="release-tag">✦ New release</span>
+    <span class="release-title">{{ release.title }}</span>
+    {% if release.notes %}
+    <details class="release-details"><summary>What's new</summary>
+      <ul>
+        {% for n in release.notes %}<li>{{ n }}</li>{% endfor %}
+      </ul>
+    </details>
+    {% endif %}
+    <button class="release-dismiss" type="button" aria-label="Dismiss release notice">✕</button>
+  </div>
+</div>
+<script>
+(function(){
+  var banner = document.querySelector('.release-banner');
+  if (!banner) return;
+  var key = 'release-dismissed-' + banner.dataset.version;
+  try { if (localStorage.getItem(key)) return; } catch (e) {}
+  banner.hidden = false;
+  banner.querySelector('.release-dismiss').addEventListener('click', function(){
+    try { localStorage.setItem(key, '1'); } catch (e) {}
+    banner.remove();
+  });
+})();
+</script>
+{% endif %}
 <main>
   <div class="wrap">
     {% block content %}{% endblock %}

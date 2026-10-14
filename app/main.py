@@ -1,7 +1,10 @@
 """ravixfs - NFL defensive Prime5 league site."""
+import hashlib
+import json
 import os
 import secrets
 from datetime import datetime, timezone
+from urllib.parse import parse_qsl, quote, urlencode, urlparse, urlunparse
 
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -17,6 +20,11 @@ from . import matchup
 from shared import identity as _identity
 
 ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "")
+# Staging gate: when STAGING_KEY is set in the server env, staging.ravixfs.com
+# requires it (via ?key= link or the /unlock form) before serving any page.
+# Empty/unset = gate open, so pushing the code never locks Adam out before
+# he has set a key. Production never gates (host check in the middleware).
+STAGING_KEY = os.environ.get("STAGING_KEY", "").strip()
 BASE = os.path.dirname(__file__)
 
 app = FastAPI(title="ravixfs")
@@ -31,6 +39,115 @@ try:
 except OSError:
     _CSS_VERSION = "1"
 templates.env.globals["css_version"] = _CSS_VERSION
+
+
+def _load_release():
+    """Release banner content from app/release.json, or None.
+
+    Bump version + notes on each release; the banner reappears because
+    dismiss is stored per-version in the browser.
+    """
+    try:
+        with open(os.path.join(BASE, "release.json"), encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict) and data.get("version") and data.get("title"):
+            return data
+    except Exception:
+        pass
+    return None
+
+
+RELEASE = _load_release()
+templates.env.globals["release"] = RELEASE
+
+
+def _staging_cookie_value():
+    """Cookie value for an unlocked browser: SHA-256 of the key, so the raw
+    key never sits in a cookie."""
+    return hashlib.sha256(STAGING_KEY.encode()).hexdigest()
+
+
+def _staging_unlocked(request: Request) -> bool:
+    if not STAGING_KEY:
+        return True
+    cookie = request.cookies.get("staging_access", "")
+    return bool(cookie) and secrets.compare_digest(cookie, _staging_cookie_value())
+
+
+def _clean_url_without_key(request: Request) -> str:
+    """Same URL with the ?key= param stripped, so the key doesn't linger
+    in the address bar, history, or logs."""
+    parsed = urlparse(str(request.url))
+    kept = [(k, v) for k, v in parse_qsl(parsed.query) if k != "key"]
+    return urlunparse(parsed._replace(query=urlencode(kept)))
+
+
+@app.middleware("http")
+async def _staging_gate(request: Request, call_next):
+    """Gate staging.ravixfs.com behind STAGING_KEY when it is set.
+
+    - /unlock and /static/* always pass (the lock page needs its CSS/logo).
+    - ?key= on any URL unlocks and redirects to the same URL minus the key.
+    - Otherwise an unlocked cookie passes; everyone else goes to /unlock.
+    Localhost / pollers hit 127.0.0.1 directly (not the staging host), so
+    they bypass the gate. Production never gates.
+    """
+    host = (request.headers.get("host", "") or "").lower()
+    if not host.startswith("staging.") or not STAGING_KEY:
+        return await call_next(request)
+    path = request.url.path
+    if path == "/unlock" or path.startswith("/static/"):
+        return await call_next(request)
+    key_param = request.query_params.get("key", "")
+    if key_param and secrets.compare_digest(key_param, STAGING_KEY):
+        resp = RedirectResponse(_clean_url_without_key(request) or "/", status_code=303)
+        resp.set_cookie("staging_access", _staging_cookie_value(),
+                        httponly=True, secure=True, samesite="lax",
+                        max_age=30 * 24 * 3600, path="/")
+        return resp
+    if _staging_unlocked(request):
+        return await call_next(request)
+    # Send them to the lock page; strip any (wrong) ?key= from the
+    # return-to URL so a bad key doesn't linger in the form / address bar.
+    nxt = request.url.path
+    kept = [(k, v) for k, v in parse_qsl(request.url.query) if k != "key"]
+    if kept:
+        nxt += "?" + urlencode(kept)
+    return RedirectResponse(f"/unlock?next={quote(nxt, safe='')}", status_code=303)
+
+
+@app.get("/unlock", response_class=HTMLResponse)
+def staging_unlock(request: Request, next: str = "/", key: str = ""):
+    """Staging lock page. ?key= here also unlocks (same as on any URL)."""
+    if not STAGING_KEY:
+        return RedirectResponse("/", status_code=303)
+    if key and secrets.compare_digest(key, STAGING_KEY):
+        resp = RedirectResponse(next or "/", status_code=303)
+        resp.set_cookie("staging_access", _staging_cookie_value(),
+                        httponly=True, secure=True, samesite="lax",
+                        max_age=30 * 24 * 3600, path="/")
+        return resp
+    if _staging_unlocked(request):
+        return RedirectResponse(next or "/", status_code=303)
+    return templates.TemplateResponse(request, "lock.html", {
+        "request": request, "next_url": next or "/", "error": False,
+    })
+
+
+@app.post("/unlock", response_class=HTMLResponse)
+def staging_unlock_post(request: Request, key: str = Form(""),
+                        next: str = Form("/")):
+    if not STAGING_KEY:
+        return RedirectResponse("/", status_code=303)
+    if key and secrets.compare_digest(key, STAGING_KEY):
+        resp = RedirectResponse(next or "/", status_code=303)
+        resp.set_cookie("staging_access", _staging_cookie_value(),
+                        httponly=True, secure=True, samesite="lax",
+                        max_age=30 * 24 * 3600, path="/")
+        return resp
+    return templates.TemplateResponse(request, "lock.html", {
+        "request": request, "next_url": next or "/", "error": True,
+    })
 
 
 @app.on_event("startup")

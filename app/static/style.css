@@ -52,6 +52,24 @@ nav a{color:var(--muted);text-decoration:none;font-weight:500;font-size:.95rem;
   padding:.45rem .75rem;border-radius:8px}
 nav a:hover{color:var(--text);background:rgba(255,255,255,.05)}
 
+/* ---- Release banner ---- */
+.release-banner{background:rgba(245,196,81,.10);border-bottom:1px solid rgba(245,196,81,.35);position:relative;z-index:1}
+.release-banner-inner{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-top:9px;padding-bottom:9px}
+.release-tag{font-size:.68rem;font-weight:700;letter-spacing:.12em;color:var(--gold);background:rgba(245,196,81,.14);padding:3px 8px;border-radius:5px;white-space:nowrap}
+.release-title{font-size:.88rem;font-weight:600;color:var(--text)}
+.release-details{font-size:.82rem;color:var(--muted)}
+.release-details summary{cursor:pointer;color:var(--cyan);font-weight:600}
+.release-details ul{margin:6px 0 2px 18px;color:var(--silver)}
+.release-dismiss{margin-left:auto;background:none;border:1px solid var(--line);color:var(--muted);padding:4px 10px;min-height:32px;border-radius:8px;cursor:pointer}
+.release-dismiss:hover{color:var(--text)}
+
+/* ---- Staging lock page ---- */
+.lock-card{max-width:480px;margin:48px auto;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:28px 26px}
+.lock-card h2{margin:0 0 8px}
+.lock-card form{margin-top:16px}
+.lock-card input[type=password]{width:100%;margin:6px 0 12px}
+.lock-card button{width:100%;min-height:44px}
+
 /* ---- Points ticker ---- */
 .ticker{
   background:#0d1524;border-top:1px solid var(--line);border-bottom:1px solid var(--line);
