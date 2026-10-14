@@ -9,7 +9,7 @@ raises, so the poller and the app keep working without Twilio configured.
 Thursday-morning reminders are driven by run_pick_reminders(), which the
 poller calls once per 15-minute run: it only fires inside the 9:00-9:15 AM
 ET window on Thursdays, only for members with sms_opt_in=1 and a phone
-number, only when they have fewer than 4 picks for the current pick week,
+number, only when they have fewer than 5 picks for the current pick week,
 and records each send in sms_reminders so nobody gets two in one week.
 """
 import logging
@@ -21,7 +21,7 @@ log = logging.getLogger("ravixfs.sms")
 
 WINDOW_START = time(9, 0)
 WINDOW_END = time(9, 15)
-PICKS_NEEDED = 4
+PICKS_NEEDED = 5
 
 
 def normalize_phone(raw) -> str | None:

@@ -40,11 +40,10 @@
   </div>
 
   <div class="dash-card">
-    <div class="dash-cardt">MY PICKS — WEEK {{ week }}</div>
+    <div class="dash-cardt">MY PICKS — WEEK {{ week }} <a href="/projections" class="dash-edit" title="Edit picks on the projections page" aria-label="Edit picks">✎</a></div>
     {% for p in picks %}
     <div class="dash-pick">
       <span class="dash-pname">{{ p.name }}</span>
-      <span class="dash-tag{% if p.src == 'locked' %} lock{% endif %}">{{ p.src|upper }}</span>
       <span class="dash-team">{{ p.team }}</span>
       <span class="dash-pright"><span class="gstatus g-{{ p.status }}">{{ p.label }}</span><span class="dash-ppts">{{ "%.1f"|format(p.points) }}</span></span>
     </div>

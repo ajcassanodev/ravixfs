@@ -26,11 +26,6 @@
 {% if token %}<p class="err">That pick link didn't match any member.</p>{% endif %}
 {% else %}
 <h3>Your Week {{ week }} picks — {{ member.name }}</h3>
-{% if locked %}
-<p>Locked player: <strong>{{ locked.name }}</strong> ({{ locked.team }} {{ locked.position }}) — scores automatically.</p>
-{% else %}
-<p class="warn">You have no locked player yet — the commissioner needs to record your draft pick.</p>
-{% endif %}
 {% if picks %}
 <ul>
 {% for p in picks %}
@@ -51,7 +46,7 @@
 {% endfor %}
 </ul>
 {% endif %}
-<p>{{ picks|length }} of 4 picks made{% if picks|length < 4 %} — tap <strong>Pick</strong> on any open player below{% endif %}.</p>
+<p>{{ picks|length }} of 5 picks made{% if picks|length < 5 %} — tap <strong>Pick</strong> on any open player below{% endif %}.</p>
 {% endif %}
 
 <form method="get" action="/projections" class="note">
@@ -91,7 +86,7 @@
     <td>{{ "%.1f"|format(r.season_pts) }}</td>
     {% if member %}
     <td>
-      {% if r.state == 'open' and picks|length < 4 %}
+      {% if r.state == 'open' and picks|length < 5 %}
       <form method="post" action="/projections/pick" style="margin:0">
         <input type="hidden" name="token" value="{{ token }}">
         <input type="hidden" name="player_id" value="{{ r.player_id }}">
@@ -102,7 +97,6 @@
         <button type="submit">Pick</button>
       </form>
       {% elif r.state == 'picked' %}<span class="ok">✓ picked</span>
-      {% elif r.state == 'locked' %}<span class="note">locked</span>
       {% elif r.state == 'started' %}<span class="note">started</span>
       {% elif r.state == 'bye' %}<span class="note">bye</span>
       {% endif %}

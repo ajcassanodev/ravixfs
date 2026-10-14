@@ -499,30 +499,26 @@ def scoring_events_json(request: Request, since: str = ""):
     """Recent scoring plays for picked players, for the notification popups.
 
     `since` is an ISO timestamp; only events after it are returned. Players
-    are limited to this week's picked set (active locked players + weekly
-    picks, league-wide). Each event carries mine=true when the viewer --
-    identified by the pick-link session / staging pick cookie -- has that player picked.
+    are limited to this week's picked set (weekly picks, league-wide). Each
+    event carries mine=true when the viewer -- identified by the pick-link
+    session / staging pick cookie -- has that player picked.
     """
     con = _db.connect()
     try:
         season = _db.current_season(con)
         week = _db.current_pick_week(con, season)
         picked = {r["player_id"] for r in con.execute(
-            "SELECT player_id FROM locked_players WHERE season = ? AND active = 1 "
-            "UNION SELECT player_id FROM weekly_picks WHERE season = ? AND week = ?",
-            (season, season, week))}
+            "SELECT player_id FROM weekly_picks WHERE season = ? AND week = ?",
+            (season, week))}
         mine = set()
         if picked:
             token = _request_pick_token(request)
             if token:
                 mine = {r["player_id"] for r in con.execute(
-                    "SELECT lp.player_id FROM locked_players lp "
-                    "JOIN members m ON m.id = lp.member_id "
-                    "WHERE m.pick_token = ? AND lp.season = ? AND lp.active = 1 "
-                    "UNION SELECT wp.player_id FROM weekly_picks wp "
+                    "SELECT wp.player_id FROM weekly_picks wp "
                     "JOIN members m ON m.id = wp.member_id "
                     "WHERE m.pick_token = ? AND wp.season = ? AND wp.week = ?",
-                    (token, season, token, season, week))}
+                    (token, season, week))}
         events = []
         if picked:
             q = ("SELECT e.*, p.name, p.team FROM scoring_events e "
@@ -553,11 +549,6 @@ def scoring_events_json(request: Request, since: str = ""):
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
     con = _db.connect()
-    dash = _dashboard_context(con, request)
-    if dash is not None:
-        con.close()
-        return templates.TemplateResponse(
-            request, "dashboard.html", {"request": request, **dash})
     season = _db.current_season(con)
     wrow = con.execute(
         "SELECT MAX(week) AS w FROM weekly_stats WHERE season = ?", (season,)
@@ -569,10 +560,10 @@ def index(request: Request):
         if through_week > 1 else ([], [])
     )
     rank_prev = {mid: i + 1 for i, (mid, _, _) in enumerate(table_prev)}
+    leader_total = table_now[0][2] if table_now else 0.0
     standings = []
     for i, (mid, name, total) in enumerate(table_now):
         rank = i + 1
-        lp = _db.member_locked_player(con, mid, season)
         pr = rank_prev.get(mid)
         if pr is None:
             move_class, move_arrow = "move-same", "–"
@@ -585,8 +576,8 @@ def index(request: Request):
         standings.append({
             "rank": rank, "name": name, "total": total,
             "move_class": move_class, "move_arrow": move_arrow,
-            "locked_name": lp["name"] if lp else "",
-            "locked_team": lp["team"] if lp else "",
+            "behind": round(leader_total - total, 2),
+            "avg": round(total / through_week, 2) if through_week else 0.0,
         })
     ticker = _ticker_data(con, season, include_test=_is_staging_host(request.headers.get("host", "")))
     cfg = scoring.scoring_map(con)
@@ -670,51 +661,6 @@ def live_view(request: Request):
     })
 
 
-@app.get("/draft", response_class=HTMLResponse)
-def draft_board(request: Request):
-    con = _db.connect()
-    season = _db.current_season(con)
-    rows = con.execute(
-        "SELECT m.name AS member, p.name AS player, p.team, p.position, "
-        "lp.acquired_via, lp.since_week FROM locked_players lp "
-        "JOIN members m ON m.id = lp.member_id "
-        "JOIN players p ON p.player_id = lp.player_id "
-        "WHERE lp.season = ? AND lp.active = 1 ORDER BY m.name",
-        (season,),
-    ).fetchall()
-    moves = con.execute(
-        "SELECT m.name AS member, p.name AS player, lp.acquired_via, "
-        "lp.since_week, lp.active FROM locked_players lp "
-        "JOIN members m ON m.id = lp.member_id "
-        "JOIN players p ON p.player_id = lp.player_id "
-        "WHERE lp.season = ? AND lp.active = 0 ORDER BY lp.id DESC",
-        (season,),
-    ).fetchall()
-    con.close()
-    return templates.TemplateResponse(request, "draft.html", {
-        "request": request, "season": season, "rows": rows, "moves": moves,
-    })
-
-
-@app.get("/trades", response_class=HTMLResponse)
-def trade_log(request: Request):
-    con = _db.connect()
-    season = _db.current_season(con)
-    rows = con.execute(
-        "SELECT t.week, g.name AS giver, r.name AS receiver, p.name AS player, "
-        "t.recorded_at FROM trades t "
-        "JOIN members g ON g.id = t.giver_member_id "
-        "JOIN members r ON r.id = t.receiver_member_id "
-        "JOIN players p ON p.player_id = t.player_id "
-        "WHERE t.season = ? ORDER BY t.week DESC, t.id DESC",
-        (season,),
-    ).fetchall()
-    con.close()
-    return templates.TemplateResponse(request, "trades.html", {
-        "request": request, "season": season, "rows": rows,
-    })
-
-
 @app.get("/guide", response_class=HTMLResponse)
 def guide(request: Request):
     return templates.TemplateResponse(request, "guide.html", {"request": request})
@@ -730,6 +676,13 @@ def releases_page(request: Request):
 
 @app.get("/submit/{token}", response_class=HTMLResponse)
 def submit_form(request: Request, token: str):
+    """My-picks summary for a member's pick link.
+
+    Picks themselves are made on /projections now; this page shows the
+    current week's picks with their lock status, plus reminder settings.
+    Opening it still establishes the member's session (and the staging
+    fallback cookie).
+    """
     con = _db.connect()
     m = con.execute("SELECT * FROM members WHERE pick_token = ?", (token,)).fetchone()
     if not m:
@@ -737,32 +690,22 @@ def submit_form(request: Request, token: str):
         raise HTTPException(404, "bad pick link")
     season = _db.current_season(con)
     week = _db.current_pick_week(con, season)
-    locked = _db.member_locked_player(con, m["id"], season)
-    players = con.execute(
-        "SELECT name, team, position, status FROM players "
-        "WHERE position_group IN ('DB','DL','LB') ORDER BY name"
-    ).fetchall()
-    locked_names = {r["name"] for r in con.execute(
-        "SELECT p.name FROM locked_players lp JOIN players p ON p.player_id=lp.player_id "
-        "WHERE lp.season=? AND lp.active=1", (season,))}
-    # annotate kickoff status per player for the form
-    now = _db.utcnow_iso()
-    # kickoff per team, so the form can flag locked / bye players
-    kos = {r["home_team"]: r["kickoff_utc"] for r in
-           con.execute("SELECT home_team, kickoff_utc FROM games WHERE season=? AND week=?", (season, week))}
-    kos.update({r["away_team"]: r["kickoff_utc"] for r in
-                con.execute("SELECT away_team, kickoff_utc FROM games WHERE season=? AND week=?", (season, week))})
     existing = con.execute(
-        "SELECT p.name FROM weekly_picks wp JOIN players p ON p.player_id=wp.player_id "
-        "WHERE wp.member_id=? AND wp.season=? AND wp.week=?",
+        "SELECT wp.player_id, p.name, p.team FROM weekly_picks wp "
+        "JOIN players p ON p.player_id = wp.player_id "
+        "WHERE wp.member_id = ? AND wp.season = ? AND wp.week = ?",
         (m["id"], season, week),
     ).fetchall()
+    picks = []
+    for e in existing:
+        ko = _db.player_kickoff(con, e["player_id"], season, week)
+        picks.append({"name": e["name"], "team": e["team"],
+                      "started": _ko_started(ko) if ko else False,
+                      "ko_label": _et_kickoff_label(ko) if ko else "Bye"})
     con.close()
     resp = templates.TemplateResponse(request, "submit.html", {
         "request": request, "member": m, "season": season, "week": week,
-        "locked": locked, "players": players, "locked_names": locked_names,
-        "kickoffs": kos, "now": now,
-        "existing": [e["name"] for e in existing], "errors": [], "token": token,
+        "picks": picks, "token": token,
     })
     _establish_session(resp, request, m)
     # Staging fallback: opening the pick link unlocks staging even when
@@ -779,84 +722,6 @@ def pick_redirect(request: Request):
     if not token:
         raise HTTPException(404, "no Ravix session -- open your pick link first")
     return RedirectResponse(f"/submit/{token}", status_code=302)
-
-
-@app.post("/submit/{token}", response_class=HTMLResponse)
-def submit_picks(
-    request: Request, token: str,
-    pick1: str = Form(""), pick2: str = Form(""),
-    pick3: str = Form(""), pick4: str = Form(""),
-):
-    con = _db.connect()
-    m = con.execute("SELECT * FROM members WHERE pick_token = ?", (token,)).fetchone()
-    if not m:
-        con.close()
-        raise HTTPException(404, "bad pick link")
-    season = _db.current_season(con)
-    week = _db.current_pick_week(con, season)
-    now = datetime.now(timezone.utc)
-    locked_ids = _db.locked_player_ids(con, season)
-
-    errors, resolved = [], []
-    seen = set()
-    for i, raw in enumerate([pick1, pick2, pick3, pick4], 1):
-        prow, err = _resolve_player(con, raw)
-        if err:
-            errors.append(f"Pick {i}: {err}")
-            continue
-        if prow["player_id"] in seen:
-            errors.append(f"Pick {i}: {prow['name']} already picked")
-            continue
-        seen.add(prow["player_id"])
-        if prow["player_id"] in locked_ids:
-            errors.append(f"Pick {i}: {prow['name']} is someone's locked player")
-            continue
-        ko = _db.player_kickoff(con, prow["player_id"], season, week)
-        if ko and ko <= now.isoformat():
-            errors.append(f"Pick {i}: {prow['name']}'s game already started")
-            continue
-        resolved.append(prow)
-
-    if len(resolved) != 4:
-        if not errors:
-            errors.append("Enter all 4 picks.")
-    else:
-        # replace this member's picks for the week (re-submit allowed while open)
-        con.execute(
-            "DELETE FROM weekly_picks WHERE member_id=? AND season=? AND week=?",
-            (m["id"], season, week),
-        )
-        ts = now.isoformat()
-        for prow in resolved:
-            con.execute(
-                "INSERT INTO weekly_picks (member_id, player_id, season, week, submitted_at) "
-                "VALUES (?,?,?,?,?)",
-                (m["id"], prow["player_id"], season, week, ts),
-            )
-        con.commit()
-        con.close()
-        return RedirectResponse(f"/submit/{token}?saved=1", status_code=303)
-
-    # re-render with errors
-    players = con.execute(
-        "SELECT name, team, position, status FROM players "
-        "WHERE position_group IN ('DB','DL','LB') ORDER BY name"
-    ).fetchall()
-    locked = _db.member_locked_player(con, m["id"], season)
-    locked_names = {r["name"] for r in con.execute(
-        "SELECT p.name FROM locked_players lp JOIN players p ON p.player_id=lp.player_id "
-        "WHERE lp.season=? AND lp.active=1", (season,))}
-    kos = {r["home_team"]: r["kickoff_utc"] for r in
-           con.execute("SELECT home_team, kickoff_utc FROM games WHERE season=? AND week=?", (season, week))}
-    kos.update({r["away_team"]: r["kickoff_utc"] for r in
-                con.execute("SELECT away_team, kickoff_utc FROM games WHERE season=? AND week=?", (season, week))})
-    con.close()
-    return templates.TemplateResponse(request, "submit.html", {
-        "request": request, "member": m, "season": season, "week": week,
-        "locked": locked, "players": players, "locked_names": locked_names,
-        "kickoffs": kos, "now": now.isoformat(), "existing": [],
-        "errors": errors, "token": token,
-    })
 
 
 @app.post("/submit/{token}/reminders")
@@ -925,87 +790,6 @@ def admin_add_member(token: str, name: str = Form(""), is_test: int = Form(0)):
     return RedirectResponse(f"/admin/{token}", status_code=303)
 
 
-def _admin_set_locked(con, member_id: int, player_id: str, via: str,
-                      season: int, week: int):
-    """Deactivate current locked player, activate the new one."""
-    con.execute(
-        "UPDATE locked_players SET active=0 WHERE member_id=? AND season=? AND active=1",
-        (member_id, season),
-    )
-    con.execute(
-        "INSERT INTO locked_players (member_id, player_id, acquired_via, since_week, season, active, created_at) "
-        "VALUES (?,?,?,?,?,1,?)",
-        (member_id, player_id, via, week, season, _db.utcnow_iso()),
-    )
-
-
-@app.post("/admin/{token}/draft")
-def admin_draft(token: str, member_id: int = Form(0), player: str = Form(""),
-                week: int = Form(1)):
-    if not _admin_ok(token):
-        raise HTTPException(404, "not found")
-    con = _db.connect()
-    season = _db.current_season(con)
-    prow, err = _resolve_player(con, player)
-    if err:
-        con.close()
-        raise HTTPException(400, err)
-    if prow["player_id"] in _db.locked_player_ids(con, season):
-        con.close()
-        raise HTTPException(400, "player already locked")
-    _admin_set_locked(con, member_id, prow["player_id"], "draft", season, week)
-    con.commit()
-    con.close()
-    return RedirectResponse(f"/admin/{token}", status_code=303)
-
-
-@app.post("/admin/{token}/redraft")
-def admin_redraft(token: str, member_id: int = Form(0), player: str = Form(""),
-                  week: int = Form(1)):
-    if not _admin_ok(token):
-        raise HTTPException(404, "not found")
-    con = _db.connect()
-    season = _db.current_season(con)
-    prow, err = _resolve_player(con, player)
-    if err:
-        con.close()
-        raise HTTPException(400, err)
-    if prow["player_id"] in _db.locked_player_ids(con, season):
-        con.close()
-        raise HTTPException(400, "player already locked")
-    _admin_set_locked(con, member_id, prow["player_id"], "redraft", season, week)
-    con.commit()
-    con.close()
-    return RedirectResponse(f"/admin/{token}", status_code=303)
-
-
-@app.post("/admin/{token}/trade")
-def admin_trade(token: str, giver_id: int = Form(0), receiver_id: int = Form(0),
-                week: int = Form(1)):
-    """Straight-up swap of the two members' locked players."""
-    if not _admin_ok(token):
-        raise HTTPException(404, "not found")
-    con = _db.connect()
-    season = _db.current_season(con)
-    g = _db.member_locked_player(con, giver_id, season)
-    r = _db.member_locked_player(con, receiver_id, season)
-    if not g or not r:
-        con.close()
-        raise HTTPException(400, "both members need a locked player")
-    _admin_set_locked(con, giver_id, r["player_id"], "trade", season, week)
-    _admin_set_locked(con, receiver_id, g["player_id"], "trade", season, week)
-    ts = _db.utcnow_iso()
-    con.execute(
-        "INSERT INTO trades (season, week, giver_member_id, receiver_member_id, player_id, recorded_at) "
-        "VALUES (?,?,?,?,?,?)", (season, week, giver_id, receiver_id, g["player_id"], ts))
-    con.execute(
-        "INSERT INTO trades (season, week, giver_member_id, receiver_member_id, player_id, recorded_at) "
-        "VALUES (?,?,?,?,?,?)", (season, week, receiver_id, giver_id, r["player_id"], ts))
-    con.commit()
-    con.close()
-    return RedirectResponse(f"/admin/{token}", status_code=303)
-
-
 @app.post("/admin/{token}/scoring")
 def admin_scoring(token: str, stat_key: str = Form(""), points: float = Form(0)):
     if not _admin_ok(token):
@@ -1055,7 +839,7 @@ def _projections_context(con, request, token="", sort="proj", dir="",
     if token:
         member = con.execute("SELECT * FROM members WHERE pick_token = ?",
                              (token,)).fetchone()
-    rows, locked, picks, locked_ids, picked_ids = [], None, [], set(), set()
+    rows, picks, picked_ids = [], [], set()
     if through >= 1:
         rows = scoring.projections(con, season, through)
         if pos in ("DB", "DL", "LB"):
@@ -1069,8 +853,6 @@ def _projections_context(con, request, token="", sort="proj", dir="",
         desc = (dir == "desc") if dir in ("asc", "desc") else default_desc
         rows.sort(key=keyfn, reverse=desc)
     if member:
-        locked = _db.member_locked_player(con, member["id"], season)
-        locked_ids = _db.locked_player_ids(con, season)
         picks = con.execute(
             "SELECT wp.player_id, p.name, p.team FROM weekly_picks wp "
             "JOIN players p ON p.player_id = wp.player_id "
@@ -1086,9 +868,7 @@ def _projections_context(con, request, token="", sort="proj", dir="",
     # per-row pick state for the template
     for r in rows:
         pid = r["player_id"]
-        if pid in locked_ids:
-            r["state"] = "locked"
-        elif pid in picked_ids:
+        if pid in picked_ids:
             r["state"] = "picked"
         else:
             ko = kos.get(r["team"])
@@ -1106,8 +886,8 @@ def _projections_context(con, request, token="", sort="proj", dir="",
                          "started": _ko_started(ko) if ko else False})
     return {
         "season": season, "week": week, "through": through,
-        "rows": rows, "member": member, "locked": locked,
-        "picks": pick_kos, "locked_ids": locked_ids,
+        "rows": rows, "member": member,
+        "picks": pick_kos,
         "scoring": scoring.scoring_map(con),
         "sort": sort if sort in PROJ_SORTS else "proj",
         "dir": dir if dir in ("asc", "desc") else "",
@@ -1229,8 +1009,6 @@ def projections_pick(request: Request, token: str = Form(""),
     err = None
     if not prow:
         err = "player not found"
-    elif prow["player_id"] in _db.locked_player_ids(con, season):
-        err = f"{prow['name']} is someone's locked player"
     else:
         existing = con.execute(
             "SELECT player_id FROM weekly_picks WHERE member_id=? AND season=? AND week=?",
@@ -1238,8 +1016,8 @@ def projections_pick(request: Request, token: str = Form(""),
         have = {r["player_id"] for r in existing}
         if prow["player_id"] in have:
             err = f"{prow['name']} is already one of your picks"
-        elif len(have) >= 4:
-            err = "you already have 4 picks (remove one first)"
+        elif len(have) >= scoring.WEEKLY_PICKS:
+            err = f"you already have {scoring.WEEKLY_PICKS} picks (remove one first)"
         else:
             ko = _db.player_kickoff(con, prow["player_id"], season, week)
             if ko and _ko_started(ko):

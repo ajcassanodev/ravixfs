@@ -14,6 +14,10 @@ STAT_KEYS = (
     "def_tds",
 )
 
+# Weekly picks per member. No draft, no locked players: every week each
+# member picks this many fresh players from the open pool.
+WEEKLY_PICKS = 5
+
 
 def scoring_map(con) -> dict:
     return {r["stat_key"]: r["points"] for r in con.execute("SELECT * FROM scoring_config")}
@@ -48,16 +52,13 @@ def player_week_points(con, player_id: str, season: int, week: int):
 
 
 def member_week_points(con, member_id: int, season: int, week: int):
-    """(total, [(player_id, name, team, source, points, stats)]) for a member-week."""
-    from . import db as _db
+    """(total, [(player_id, name, team, source, points, stats)]) for a member-week.
+
+    No draft: every week each member picks WEEKLY_PICKS fresh players from
+    the open pool. (Legacy locked_players rows are ignored.)
+    """
     total = 0.0
     lines = []
-    locked = _db.member_locked_player(con, member_id, season)
-    if locked:
-        pts, stats = player_week_points(con, locked["player_id"], season, week)
-        total += pts
-        lines.append((locked["player_id"], locked["name"], locked["team"],
-                      "locked", pts, stats))
     picks = con.execute(
         "SELECT wp.player_id, p.name, p.team FROM weekly_picks wp "
         "JOIN players p ON p.player_id = wp.player_id "

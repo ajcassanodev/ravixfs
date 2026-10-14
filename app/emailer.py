@@ -16,7 +16,7 @@ without email configured.
 Thursday-morning reminders are driven by run_email_reminders(), which the
 poller calls once per 15-minute run: it only fires inside the 9:00-9:15 AM
 ET window on Thursdays, only for members with email_opt_in=1 and a valid
-email address, only when they have fewer than 4 picks for the current pick
+email address, only when they have fewer than 5 picks for the current pick
 week, and records each send in email_reminders so nobody gets two in one
 week.
 """
@@ -32,7 +32,7 @@ log = logging.getLogger("ravixfs.emailer")
 
 WINDOW_START = time(9, 0)
 WINDOW_END = time(9, 15)
-PICKS_NEEDED = 4
+PICKS_NEEDED = 5
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 

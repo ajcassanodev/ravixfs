@@ -24,30 +24,6 @@
   <button>Add member</button>
 </form>
 
-<h3>Record draft pick</h3>
-<form method="post" action="/admin/{{ token }}/draft">
-  <input name="member_id" placeholder="member id" required size="6">
-  <input name="player" list="allp" placeholder="Player name" required>
-  <input name="week" placeholder="week" size="4" value="5">
-  <button>Record draft</button>
-</form>
-
-<h3>Record injury redraft</h3>
-<form method="post" action="/admin/{{ token }}/redraft">
-  <input name="member_id" placeholder="member id" required size="6">
-  <input name="player" list="allp" placeholder="Replacement player" required>
-  <input name="week" placeholder="week" size="4" value="5">
-  <button>Record redraft</button>
-</form>
-
-<h3>Record trade (straight swap of locked players)</h3>
-<form method="post" action="/admin/{{ token }}/trade">
-  <input name="giver_id" placeholder="giver member id" required size="6">
-  <input name="receiver_id" placeholder="receiver member id" required size="6">
-  <input name="week" placeholder="week" size="4" value="5">
-  <button>Record trade</button>
-</form>
-
 <h3>Scoring config</h3>
 <p>Changing these recalculates <em>all</em> past weeks instantly — points are never stored.</p>
 <table>
