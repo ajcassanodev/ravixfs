@@ -10,7 +10,7 @@
 <body>
 <header>
   <div class="wrap">
-    <a class="brand" href="/unlock">
+    <a class="brand" href="/locked">
       <img src="/static/logo.png" alt="Ravix logo">
       <span class="brand-text"><span>RAVIX <em>FANTASY SPORTS</em></span><small>Staging</small></span>
     </a>
@@ -20,17 +20,18 @@
   <div class="wrap">
     <div class="lock-card">
       <h2>Staging is locked</h2>
-      <p class="note">This is the test site. Enter the staging key to continue.</p>
+      <p class="note">This is the test site. Open your <b>staging</b> pick link to get in — your prod pick link won't work here, since staging has its own member list.</p>
+      <p class="note">Don't have a staging link yet? Ask Adam to add you in the staging admin.</p>
       {% if error %}
-      <p class="err">That key didn't match. Try again.</p>
+      <p class="err">That link didn't match a staging member. Check you pasted your staging link, not your prod one.</p>
       {% endif %}
-      <form method="post" action="/unlock">
+      <form method="post" action="/locked">
         <input type="hidden" name="next" value="{{ next_url }}">
-        <label for="lock-key">Staging key</label><br>
-        <input id="lock-key" name="key" type="password" autocomplete="off" autofocus required>
+        <label for="lock-link">Or paste your staging pick link</label><br>
+        <input id="lock-link" name="pick_link" type="text" autocomplete="off" autofocus placeholder="https://staging.ravixfs.com/submit/…" required>
         <button type="submit">Unlock staging</button>
       </form>
-      <p class="note">Tip: you can also open a link with <code>?key=YOUR-KEY</code> once and it stays unlocked on this browser for 30 days.</p>
+      <p class="note">Once unlocked, this browser stays unlocked for 180 days.</p>
     </div>
   </div>
 </main>

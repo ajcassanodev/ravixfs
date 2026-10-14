@@ -1,5 +1,4 @@
 """ravixfs - NFL defensive Prime5 league site."""
-import hashlib
 import json
 import os
 import secrets
@@ -20,11 +19,12 @@ from . import matchup
 from shared import identity as _identity
 
 ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "")
-# Staging gate: when STAGING_KEY is set in the server env, staging.ravixfs.com
-# requires it (via ?key= link or the /unlock form) before serving any page.
-# Empty/unset = gate open, so pushing the code never locks Adam out before
-# he has set a key. Production never gates (host check in the middleware).
-STAGING_KEY = os.environ.get("STAGING_KEY", "").strip()
+# Staging gate: staging.ravixfs.com requires a personal pick link.
+# No shared key: a member opens their STAGING pick link once (or pastes it
+# on /locked), and the browser stays unlocked. Production never gates.
+# Cookie is host-only (no Domain=) so a staging pick token is never sent
+# to production, and never accepted there.
+STAGING_PICK_COOKIE = "staging_pick"
 BASE = os.path.dirname(__file__)
 
 app = FastAPI(title="ravixfs")
@@ -61,71 +61,134 @@ RELEASE = _load_release()
 templates.env.globals["release"] = RELEASE
 
 
-def _staging_cookie_value():
-    """Cookie value for an unlocked browser: SHA-256 of the key, so the raw
-    key never sits in a cookie."""
-    return hashlib.sha256(STAGING_KEY.encode()).hexdigest()
+def _request_pick_token(request: Request):
+    """Pick token identifying this browser, or None.
+
+    Shared session first; staging fallback cookie second. The fallback
+    cookie is only honored on staging / localhost — never on production,
+    so a staging token can't leak into prod identity even if a cookie
+    were somehow sent there. Callers look the token up in the per-game
+    DB, so a forged/unknown token simply resolves to no member.
+    """
+    try:
+        sm = _identity.session_member(request)
+        if sm and sm.get("pick_token"):
+            return sm["pick_token"]
+    except Exception:
+        pass
+    host = (request.headers.get("host", "") or "").lower().split(":")[0]
+    if host.startswith("staging.") or host in ("localhost", "127.0.0.1"):
+        tok = (request.cookies.get(STAGING_PICK_COOKIE, "") or "").strip()
+        return tok or None
+    return None
+
+
+def _staging_token_member(token: str):
+    """Member row for a staging pick token, or None. DB-validated."""
+    token = (token or "").strip()
+    if not token:
+        return None
+    try:
+        con = _db.connect()
+        try:
+            return con.execute(
+                "SELECT * FROM members WHERE pick_token = ?", (token,)
+            ).fetchone()
+        finally:
+            con.close()
+    except Exception:
+        return None
+
+
+def _set_staging_pick_cookie(response, request: Request, token: str) -> None:
+    """Host-only staging cookie carrying the member's own pick token.
+
+    The pick token IS the credential (same as the pick link itself), so
+    storing it in an HttpOnly cookie is no weaker than the link. Host-only
+    (no Domain=) so it never goes to production. Secure on real hosts.
+    """
+    host = (request.headers.get("host", "") or "").split(":")[0].lower()
+    kwargs = dict(key=STAGING_PICK_COOKIE, value=token, path="/",
+                  httponly=True, samesite="lax",
+                  max_age=180 * 24 * 3600)
+    if host not in ("localhost", "127.0.0.1"):
+        kwargs["secure"] = True
+    response.set_cookie(**kwargs)
+
+
+def _extract_pick_token(text: str) -> str:
+    """Pull a pick token out of a pasted pick link or a bare token."""
+    text = (text or "").strip()
+    if not text:
+        return ""
+    if "/submit/" in text:
+        text = text.split("/submit/", 1)[1]
+        text = text.split("?")[0].split("#")[0].split("/")[0]
+    return text.strip()
+
+
+def _clean_url_without_token(request: Request) -> str:
+    """Same URL with the ?token= param stripped, so the pick token doesn't
+    linger in the address bar, history, or logs."""
+    parsed = urlparse(str(request.url))
+    kept = [(k, v) for k, v in parse_qsl(parsed.query) if k != "token"]
+    return urlunparse(parsed._replace(query=urlencode(kept)))
 
 
 def _staging_unlocked(request: Request) -> bool:
-    if not STAGING_KEY:
-        return True
-    cookie = request.cookies.get("staging_access", "")
-    return bool(cookie) and secrets.compare_digest(cookie, _staging_cookie_value())
-
-
-def _clean_url_without_key(request: Request) -> str:
-    """Same URL with the ?key= param stripped, so the key doesn't linger
-    in the address bar, history, or logs."""
-    parsed = urlparse(str(request.url))
-    kept = [(k, v) for k, v in parse_qsl(parsed.query) if k != "key"]
-    return urlunparse(parsed._replace(query=urlencode(kept)))
+    """True when this browser has proven a staging pick link."""
+    try:
+        if _identity.session_member(request) is not None:
+            return True
+    except Exception:
+        pass
+    cookie = request.cookies.get(STAGING_PICK_COOKIE, "")
+    return _staging_token_member(cookie) is not None
 
 
 @app.middleware("http")
 async def _staging_gate(request: Request, call_next):
-    """Gate staging.ravixfs.com behind STAGING_KEY when it is set.
+    """Gate staging.ravixfs.com behind a personal staging pick link.
 
-    - /unlock and /static/* always pass (the lock page needs its CSS/logo).
-    - ?key= on any URL unlocks and redirects to the same URL minus the key.
-    - Otherwise an unlocked cookie passes; everyone else goes to /unlock.
+    - /locked, /unlock (compat redirect), and /static/* always pass.
+    - /submit/<token> always passes: it IS the front door, and opening it
+      sets both the shared session and the staging fallback cookie.
+    - /admin/* always passes through: the handler still enforces ADMIN_TOKEN.
+    - ?token=<staging pick token> on any URL unlocks, then redirects to
+      the same URL minus the token.
+    - Otherwise a shared session or a validated fallback cookie passes;
+      everyone else goes to /locked.
     Localhost / pollers hit 127.0.0.1 directly (not the staging host), so
     they bypass the gate. Production never gates.
     """
     host = (request.headers.get("host", "") or "").lower()
-    if not host.startswith("staging.") or not STAGING_KEY:
+    if not host.startswith("staging."):
         return await call_next(request)
     path = request.url.path
-    if path == "/unlock" or path.startswith("/static/"):
+    if path in ("/locked", "/unlock") or path.startswith("/static/"):
         return await call_next(request)
-    key_param = request.query_params.get("key", "")
-    if key_param and secrets.compare_digest(key_param, STAGING_KEY):
-        resp = RedirectResponse(_clean_url_without_key(request) or "/", status_code=303)
-        resp.set_cookie("staging_access", _staging_cookie_value(),
-                        httponly=True, secure=True, samesite="lax",
-                        max_age=30 * 24 * 3600, path="/")
+    if path.startswith("/submit/") or path.startswith("/admin/"):
+        return await call_next(request)
+    token_param = request.query_params.get("token", "")
+    if token_param and _staging_token_member(token_param) is not None:
+        resp = RedirectResponse(_clean_url_without_token(request) or "/", status_code=303)
+        _set_staging_pick_cookie(resp, request, token_param.strip())
         return resp
     if _staging_unlocked(request):
         return await call_next(request)
-    # Send them to the lock page; strip any (wrong) ?key= from the
-    # return-to URL so a bad key doesn't linger in the form / address bar.
     nxt = request.url.path
-    kept = [(k, v) for k, v in parse_qsl(request.url.query) if k != "key"]
+    kept = [(k, v) for k, v in parse_qsl(request.url.query) if k != "token"]
     if kept:
         nxt += "?" + urlencode(kept)
-    return RedirectResponse(f"/unlock?next={quote(nxt, safe='')}", status_code=303)
+    return RedirectResponse(f"/locked?next={quote(nxt, safe='')}", status_code=303)
 
 
-@app.get("/unlock", response_class=HTMLResponse)
-def staging_unlock(request: Request, next: str = "/", key: str = ""):
-    """Staging lock page. ?key= here also unlocks (same as on any URL)."""
-    if not STAGING_KEY:
-        return RedirectResponse("/", status_code=303)
-    if key and secrets.compare_digest(key, STAGING_KEY):
+@app.get("/locked", response_class=HTMLResponse)
+def staging_locked(request: Request, next: str = "/", token: str = ""):
+    """Staging lock page. ?token= here also unlocks (same as on any URL)."""
+    if token and _staging_token_member(token) is not None:
         resp = RedirectResponse(next or "/", status_code=303)
-        resp.set_cookie("staging_access", _staging_cookie_value(),
-                        httponly=True, secure=True, samesite="lax",
-                        max_age=30 * 24 * 3600, path="/")
+        _set_staging_pick_cookie(resp, request, token.strip())
         return resp
     if _staging_unlocked(request):
         return RedirectResponse(next or "/", status_code=303)
@@ -134,20 +197,23 @@ def staging_unlock(request: Request, next: str = "/", key: str = ""):
     })
 
 
-@app.post("/unlock", response_class=HTMLResponse)
-def staging_unlock_post(request: Request, key: str = Form(""),
+@app.post("/locked", response_class=HTMLResponse)
+def staging_locked_post(request: Request, pick_link: str = Form(""),
                         next: str = Form("/")):
-    if not STAGING_KEY:
-        return RedirectResponse("/", status_code=303)
-    if key and secrets.compare_digest(key, STAGING_KEY):
+    token = _extract_pick_token(pick_link)
+    if token and _staging_token_member(token) is not None:
         resp = RedirectResponse(next or "/", status_code=303)
-        resp.set_cookie("staging_access", _staging_cookie_value(),
-                        httponly=True, secure=True, samesite="lax",
-                        max_age=30 * 24 * 3600, path="/")
+        _set_staging_pick_cookie(resp, request, token)
         return resp
     return templates.TemplateResponse(request, "lock.html", {
         "request": request, "next_url": next or "/", "error": True,
     })
+
+
+@app.get("/unlock", response_class=HTMLResponse)
+def staging_unlock_compat(request: Request, next: str = "/"):
+    """Old lock URL from the brief shared-key build: send to /locked."""
+    return RedirectResponse(f"/locked?next={quote(next or '/', safe='')}", status_code=303)
 
 
 @app.on_event("startup")
@@ -288,14 +354,11 @@ def ticker_json(request: Request):
 def _dashboard_context(con, request):
     """Dashboard context for a signed-in member, or None.
 
-    Signed in = pick-link session cookie resolves to a members row.
+    Signed in = pick-link session cookie or staging pick cookie resolves
+    to a members row.
     Rank includes the live week when it has data (same as the ticker).
     """
-    try:
-        sm = _identity.session_member(request)
-        token = sm["pick_token"] if sm and sm["pick_token"] else None
-    except Exception:
-        token = None
+    token = _request_pick_token(request)
     if not token:
         return None
     m = con.execute(
@@ -435,7 +498,7 @@ def scoring_events_json(request: Request, since: str = ""):
     `since` is an ISO timestamp; only events after it are returned. Players
     are limited to this week's picked set (active locked players + weekly
     picks, league-wide). Each event carries mine=true when the viewer --
-    identified by the pick-link session cookie -- has that player picked.
+    identified by the pick-link session / staging pick cookie -- has that player picked.
     """
     con = _db.connect()
     try:
@@ -447,11 +510,7 @@ def scoring_events_json(request: Request, since: str = ""):
             (season, season, week))}
         mine = set()
         if picked:
-            try:
-                sm = _identity.session_member(request)
-                token = sm["pick_token"] if sm and sm["pick_token"] else None
-            except Exception:
-                token = None
+            token = _request_pick_token(request)
             if token:
                 mine = {r["player_id"] for r in con.execute(
                     "SELECT lp.player_id FROM locked_players lp "
@@ -695,17 +754,20 @@ def submit_form(request: Request, token: str):
         "existing": [e["name"] for e in existing], "errors": [], "token": token,
     })
     _establish_session(resp, request, m)
+    # Staging fallback: opening the pick link unlocks staging even when
+    # the shared session secret isn't configured on the server.
+    _set_staging_pick_cookie(resp, request, token)
     return resp
 
 
 @app.get("/pick", response_class=HTMLResponse)
 def pick_redirect(request: Request):
-    """Cross-game entry point: resolve the shared Ravix session to this
-    member's Prime5 pick link. Additive only -- existing links untouched."""
-    m = _identity.session_member(request)
-    if not m:
+    """Cross-game entry point: resolve the session / staging pick cookie
+    to this member's Prime5 pick link. Additive only -- existing links untouched."""
+    token = _request_pick_token(request)
+    if not token:
         raise HTTPException(404, "no Ravix session -- open your pick link first")
-    return RedirectResponse(f"/submit/{m['pick_token']}", status_code=302)
+    return RedirectResponse(f"/submit/{token}", status_code=302)
 
 
 @app.post("/submit/{token}", response_class=HTMLResponse)
@@ -1047,14 +1109,10 @@ def _projections_context(con, request, token="", sort="proj", dir="",
 def projections_page(request: Request, token: str = "", sort: str = "proj",
                      dir: str = "", pos: str = "", q: str = ""):
     if not token:
-        # Member opened their personal pick link earlier? The shared session
-        # cookie identifies them, so they don't have to paste their token.
-        try:
-            sm = _identity.session_member(request)
-        except Exception:
-            sm = None
-        if sm is not None and sm["pick_token"]:
-            token = sm["pick_token"]
+        # Member opened their personal pick link earlier? The session
+        # cookie (or staging pick cookie) identifies them, so they don't
+        # have to paste their token.
+        token = _request_pick_token(request) or ""
     con = _db.connect()
     ctx = _projections_context(con, request, token, sort, dir, pos, q)
     con.close()

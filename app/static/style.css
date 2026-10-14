@@ -67,7 +67,7 @@ nav a:hover{color:var(--text);background:rgba(255,255,255,.05)}
 .lock-card{max-width:480px;margin:48px auto;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:28px 26px}
 .lock-card h2{margin:0 0 8px}
 .lock-card form{margin-top:16px}
-.lock-card input[type=password]{width:100%;margin:6px 0 12px}
+.lock-card input[type=password],.lock-card input[type=text]{width:100%;margin:6px 0 12px}
 .lock-card button{width:100%;min-height:44px}
 
 /* ---- Points ticker ---- */
