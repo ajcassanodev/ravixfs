@@ -547,21 +547,11 @@ def scoring_events_json(request: Request, since: str = ""):
         con.close()
 
 
-def _standings_context(con, request):
-    """Standings rows with behind-leader and avg/week, plus ticker."""
-    season = _db.current_season(con)
-    wrow = con.execute(
-        "SELECT MAX(week) AS w FROM weekly_stats WHERE season = ?", (season,)
-    ).fetchone()
-    through_week = wrow["w"] or 0
-    table_now, test_table = scoring.standings(con, season, through_week)
-    table_prev, _ = (
-        scoring.standings(con, season, through_week - 1)
-        if through_week > 1 else ([], [])
-    )
+def _enrich_table(table_now, table_prev, through_week):
+    """Standings card dicts: rank, behind-leader, avg/week, weekly movement."""
     rank_prev = {mid: i + 1 for i, (mid, _, _) in enumerate(table_prev)}
     leader_total = table_now[0][2] if table_now else 0.0
-    standings = []
+    cards = []
     for i, (mid, name, total) in enumerate(table_now):
         rank = i + 1
         pr = rank_prev.get(mid)
@@ -573,16 +563,38 @@ def _standings_context(con, request):
             move_class, move_arrow, move_n = "move-down", f"▼{rank - pr}", pr - rank
         else:
             move_class, move_arrow, move_n = "move-same", "–", 0
-        standings.append({
+        if move_n > 0:
+            move_title = f"up {move_n} this week"
+        elif move_n < 0:
+            move_title = f"down {-move_n} this week"
+        else:
+            move_title = "no change this week"
+        cards.append({
             "rank": rank, "name": name, "total": total,
             "move_class": move_class, "move_arrow": move_arrow,
-            "move_n": move_n,
+            "move_title": move_title,
             "behind": round(leader_total - total, 2),
             "avg": round(total / through_week, 2) if through_week else 0.0,
         })
+    return cards
+
+
+def _standings_context(con, request):
+    """Standings rows with behind-leader and avg/week, plus ticker."""
+    season = _db.current_season(con)
+    wrow = con.execute(
+        "SELECT MAX(week) AS w FROM weekly_stats WHERE season = ?", (season,)
+    ).fetchone()
+    through_week = wrow["w"] or 0
+    table_now, test_now = scoring.standings(con, season, through_week)
+    if through_week > 1:
+        table_prev, test_prev = scoring.standings(con, season, through_week - 1)
+    else:
+        table_prev, test_prev = [], []
     return {
-        "season": season, "standings": standings,
-        "test_table": test_table,
+        "season": season,
+        "standings": _enrich_table(table_now, table_prev, through_week),
+        "test_cards": _enrich_table(test_now, test_prev, through_week),
         "ticker": _ticker_data(
             con, season,
             include_test=_is_staging_host(request.headers.get("host", ""))),
