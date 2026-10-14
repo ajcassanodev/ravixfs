@@ -8,7 +8,7 @@
   <div class="stand-card rank-{{ s.rank if s.rank <= 3 else 'x' }}">
     <div class="rank-badge">{{ s.rank }}</div>
     <div class="stand-main">
-      <div class="stand-name">{{ s.name }} <span class="move {{ s.move_class }}">{{ s.move_arrow }}</span></div>
+      <div class="stand-name">{{ s.name }} <span class="move {{ s.move_class }}" title="{% if s.move_n > 0 %}up {{ s.move_n }} this week{% elif s.move_n < 0 %}down {{ -s.move_n }} this week{% else %}no change this week{% endif %}">{{ s.move_arrow }}</span></div>
       <div class="stand-sub">
         {% if s.behind > 0 %}<span>{{ "%.1f"|format(s.behind) }} behind</span><span> · </span>{% endif %}<span>avg {{ "%.1f"|format(s.avg) }}/wk</span>
       </div>

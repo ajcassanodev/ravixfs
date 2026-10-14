@@ -566,16 +566,17 @@ def _standings_context(con, request):
         rank = i + 1
         pr = rank_prev.get(mid)
         if pr is None:
-            move_class, move_arrow = "move-same", "–"
+            move_class, move_arrow, move_n = "move-same", "–", 0
         elif pr > rank:
-            move_class, move_arrow = "move-up", "▲"
+            move_class, move_arrow, move_n = "move-up", f"▲{pr - rank}", pr - rank
         elif pr < rank:
-            move_class, move_arrow = "move-down", "▼"
+            move_class, move_arrow, move_n = "move-down", f"▼{rank - pr}", pr - rank
         else:
-            move_class, move_arrow = "move-same", "·"
+            move_class, move_arrow, move_n = "move-same", "–", 0
         standings.append({
             "rank": rank, "name": name, "total": total,
             "move_class": move_class, "move_arrow": move_arrow,
+            "move_n": move_n,
             "behind": round(leader_total - total, 2),
             "avg": round(total / through_week, 2) if through_week else 0.0,
         })
