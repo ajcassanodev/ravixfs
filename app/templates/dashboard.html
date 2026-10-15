@@ -74,6 +74,9 @@
 
   <div class="dash-card">
     <div class="dash-cardt">PICK REMINDERS</div>
+    {% if not member.email_opt_in %}
+    <p class="note">📧 Email reminders are working — add your email below and check the box to get a Thursday reminder if you haven't made all 5 picks.</p>
+    {% endif %}
     {% if request.query_params.get('reminders') == 'saved' %}
     <p class="ok">Reminder settings saved.</p>
     {% elif request.query_params.get('reminders') == 'badphone' %}
