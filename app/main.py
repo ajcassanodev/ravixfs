@@ -658,6 +658,20 @@ def _et_kickoff_label(ko_iso: str) -> str:
         return ""
 
 
+def _et_stamp(iso_utc: str) -> str:
+    """'2026-10-13T18:37:49.646235+00:00' -> 'Tue 10/13 2:37 PM' (America/New_York)."""
+    if not iso_utc:
+        return "—"
+    try:
+        from zoneinfo import ZoneInfo
+        dt = datetime.fromisoformat(iso_utc)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(ZoneInfo("America/New_York")).strftime("%a %-m/%-d %-I:%M %p")
+    except Exception:
+        return iso_utc
+
+
 @app.get("/live", response_class=HTMLResponse)
 def live_view(request: Request):
     """Who's playing right now: every picked player with their game status
@@ -819,6 +833,44 @@ def admin_scoring(token: str, stat_key: str = Form(""), points: float = Form(0))
     con.commit()
     con.close()
     return RedirectResponse(f"/admin/{token}", status_code=303)
+
+
+@app.get("/admin/{token}/participation", response_class=HTMLResponse)
+def admin_participation(request: Request, token: str, week: int = 0):
+    if not _admin_ok(token):
+        raise HTTPException(404, "not found")
+    con = _db.connect()
+    season = _db.current_season(con)
+    weeks = [r["week"] for r in con.execute(
+        "SELECT DISTINCT week FROM weekly_picks WHERE season=? ORDER BY week", (season,))]
+    if week not in weeks:
+        week = weeks[-1] if weeks else 0
+    rows = []
+    if week:
+        for m in con.execute("SELECT * FROM members ORDER BY name").fetchall():
+            cnt, first, last = con.execute(
+                "SELECT COUNT(*), MIN(submitted_at), MAX(submitted_at) FROM weekly_picks "
+                "WHERE member_id=? AND season=? AND week=?",
+                (m["id"], season, week)).fetchone()
+            sms = con.execute(
+                "SELECT sent_at FROM sms_reminders WHERE member_id=? AND season=? AND week=?",
+                (m["id"], season, week)).fetchone()
+            email = con.execute(
+                "SELECT sent_at FROM email_reminders WHERE member_id=? AND season=? AND week=?",
+                (m["id"], season, week)).fetchone()
+            rows.append({
+                "name": m["name"], "is_test": m["is_test"],
+                "sms_opt_in": m["sms_opt_in"], "email_opt_in": m["email_opt_in"],
+                "picks": cnt,
+                "first": _et_stamp(first), "last": _et_stamp(last),
+                "sms_sent": _et_stamp(sms["sent_at"]) if sms else "",
+                "email_sent": _et_stamp(email["sent_at"]) if email else "",
+            })
+    con.close()
+    return templates.TemplateResponse(request, "participation.html", {
+        "request": request, "token": token, "season": season,
+        "weeks": weeks, "week": week, "rows": rows,
+    })
 
 
 # ---------------- projections + pick-from-report ----------------

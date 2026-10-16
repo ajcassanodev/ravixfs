@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Participation{% endblock %}
+{% block brand_sub %}ADMIN CONSOLE{% endblock %}
+{% block content %}
+<h2>Participation — Season {{ season }}{% if week %}, Week {{ week }}{% endif %}</h2>
+<p><a href="/admin/{{ token }}">← Back to admin</a></p>
+{% if weeks %}
+<p>Week:{% for w in weeks %} {% if w == week %}<strong>{{ w }}</strong>{% else %}<a href="/admin/{{ token }}/participation?week={{ w }}">{{ w }}</a>{% endif %}{% endfor %}</p>
+<table>
+  <tr><th>Member</th><th>Test?</th><th>Picks</th><th>First pick (ET)</th><th>Last pick (ET)</th><th>SMS opt-in</th><th>Email opt-in</th><th>SMS reminder</th><th>Email reminder</th></tr>
+  {% for r in rows %}
+  <tr><td>{{ r.name }}</td>
+      <td>{% if r.is_test %}yes{% else %}—{% endif %}</td>
+      <td>{{ r.picks }}/5</td>
+      <td>{{ r.first }}</td>
+      <td>{{ r.last }}</td>
+      <td>{% if r.sms_opt_in %}yes{% else %}—{% endif %}</td>
+      <td>{% if r.email_opt_in %}yes{% else %}—{% endif %}</td>
+      <td>{{ r.sms_sent or '—' }}</td>
+      <td>{{ r.email_sent or '—' }}</td></tr>
+  {% endfor %}
+</table>
+{% else %}
+<p>No picks recorded yet this season.</p>
+{% endif %}
+{% endblock %}
