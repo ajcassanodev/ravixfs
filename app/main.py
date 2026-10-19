@@ -495,6 +495,36 @@ def dashboard(request: Request):
         request, "dashboard.html", {"request": request, **ctx})
 
 
+@app.get("/dashboard.json")
+def dashboard_json(request: Request):
+    """Live-refresh payload for the signed-in member's dashboard.
+
+    Same auth as /dashboard (pick-link session cookie). Returns only the
+    dynamic bits; the ticker has its own endpoint. 401 when signed out so
+    the page's poller can stand down quietly.
+    """
+    con = _db.connect()
+    ctx = _dashboard_context(con, request)
+    con.close()
+    if ctx is None:
+        return JSONResponse({"detail": "Not signed in"}, status_code=401)
+    return JSONResponse({
+        "week": ctx["week"],
+        "week_live": ctx["week_live"],
+        "rank": ctx["rank"],
+        "total": ctx["total"],
+        "gap": ctx["gap"],
+        "leader_name": ctx["leader_name"],
+        "week_total": ctx["week_total"],
+        "season_pie": ctx["season_pie"],
+        "week_pie": ctx["week_pie"],
+        "picks": ctx["picks"],
+        "top4": ctx["top4"],
+        "trend": ctx["trend"],
+        "next_lock": ctx["next_lock"],
+    })
+
+
 @app.get("/scoring-events.json")
 def scoring_events_json(request: Request, since: str = ""):
     """Recent scoring plays for picked players, for the notification popups.

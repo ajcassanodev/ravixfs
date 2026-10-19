@@ -8,23 +8,23 @@
       <div class="dash-eyebrow">PRIME5 · TEST SEASON</div>
       <h2 class="dash-title">{{ member_name }}'s Dashboard</h2>
     </div>
-    <div class="dash-live{% if not week_live %} idle{% endif %}">
+    <div class="dash-live{% if not week_live %} idle{% endif %}" id="dash-livebadge">
       {% if week_live %}<span class="live-dot"></span>{% endif %}WEEK {{ week }}{% if week_live %} · LIVE{% endif %}
     </div>
   </div>
 
-  <div class="dash-rank">
-    <div class="dash-place">#{{ rank or "–" }}</div>
+  <div class="dash-rank" id="dash-rankcard">
+    <div class="dash-place" id="dash-rank">#{{ rank or "–" }}</div>
     <div>
-      <div class="dash-pts">{{ "%.1f"|format(total or 0) }} <span>pts</span></div>
-      <div class="dash-gap">
+      <div class="dash-pts"><span id="dash-totalv" data-v="{{ total or 0 }}">{{ "%.1f"|format(total or 0) }}</span> <span>pts</span></div>
+      <div class="dash-gap" id="dash-gap">
         {% if rank == 1 %}Leading the league
         {% elif gap and gap > 0 %}{{ "%.1f"|format(gap) }} behind {{ leader_name }}
         {% else %}Tied at the top{% endif %}
       </div>
     </div>
     {% if next_lock %}
-    <div class="dash-next">Next lock<br><b>{{ next_lock.matchup }} · {{ next_lock.label }}</b></div>
+    <div class="dash-next" id="dash-next">Next lock<br><b>{{ next_lock.matchup }} · {{ next_lock.label }}</b></div>
     {% endif %}
   </div>
 
@@ -42,10 +42,10 @@
   <div class="dash-card">
     <div class="dash-cardt">MY PICKS — WEEK {{ week }} <a href="/projections" class="dash-edit" title="Edit picks on the projections page" aria-label="Edit picks">✎</a></div>
     {% for p in picks %}
-    <div class="dash-pick">
+    <div class="dash-pick" data-idx="{{ loop.index0 }}">
       <span class="dash-pname">{{ p.name }}</span>
       <span class="dash-team">{{ p.team }}</span>
-      <span class="dash-pright"><span class="gstatus g-{{ p.status }}">{{ p.label }}</span><span class="dash-ppts">{{ "%.1f"|format(p.points) }}</span></span>
+      <span class="dash-pright"><span class="gstatus g-{{ p.status }}">{{ p.label }}</span><span class="dash-ppts" data-v="{{ p.points }}">{{ "%.1f"|format(p.points) }}</span></span>
     </div>
     {% else %}
     <p class="muted">No picks yet this week.</p>
@@ -55,6 +55,7 @@
   <div class="dash-grid">
     <div class="dash-card">
       <div class="dash-cardt">TOP PERFORMERS — WEEK {{ week }}</div>
+      <div id="dash-top4">
       {% for t in top4 %}
       <div class="dash-toprow">
         <span class="dash-trank">{{ loop.index }}</span>
@@ -65,6 +66,7 @@
       {% else %}
       <p class="muted">No games scored yet.</p>
       {% endfor %}
+      </div>
     </div>
     <div class="dash-card">
       <div class="dash-cardt">WEEKLY TREND</div>
@@ -136,23 +138,157 @@
   donut('dash-d1', 'dash-l1', {{ season_pie|tojson }});
   donut('dash-d2', 'dash-l2', {{ week_pie|tojson }});
 
-  var trend = {{ trend|tojson }};
-  var barsEl = document.getElementById('dash-bars');
-  if (barsEl) {
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  }
+
+  function renderTrend(trend, isLive) {
+    var barsEl = document.getElementById('dash-bars');
+    if (!barsEl) return;
     if (!trend.length) {
       barsEl.innerHTML = '<p class="muted" style="margin:0">No weeks yet.</p>';
-    } else {
-      var mx = Math.max.apply(null, trend.map(function (t) { return t.points; }).concat([1]));
-      var isLive = {{ 'true' if week_live else 'false' }};
-      barsEl.innerHTML = trend.map(function (t, i) {
-        var h = Math.max(4, Math.round(t.points / mx * 72));
-        var live = isLive && i === trend.length - 1;
-        return '<div class="dash-barcol"><span class="dash-bv">' + t.points.toFixed(1) + '</span>' +
-          '<div class="dash-bar' + (live ? ' live' : '') + '" style="height:' + h + 'px"></div>' +
-          '<span class="dash-bw">W' + t.week + '</span></div>';
-      }).join('');
+      return;
     }
+    var mx = Math.max.apply(null, trend.map(function (t) { return t.points; }).concat([1]));
+    barsEl.innerHTML = trend.map(function (t, i) {
+      var h = Math.max(4, Math.round(t.points / mx * 72));
+      var live = isLive && i === trend.length - 1;
+      return '<div class="dash-barcol"><span class="dash-bv">' + t.points.toFixed(1) + '</span>' +
+        '<div class="dash-bar' + (live ? ' live' : '') + '" style="height:' + h + 'px"></div>' +
+        '<span class="dash-bw">W' + t.week + '</span></div>';
+    }).join('');
   }
+  renderTrend({{ trend|tojson }}, {{ 'true' if week_live else 'false' }});
+
+  /* Live dashboard refresh: poll /dashboard.json every 60s and update the
+     numbers in place (gold pulse + count-up on changes, same as the ticker).
+     Skips polling while the tab is hidden; reloads once if the week rolls
+     over so the new week's layout renders cleanly. */
+  var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var pageWeek = {{ week }};
+  var prevPickPts = {};
+  document.querySelectorAll('.dash-pick').forEach(function (row) {
+    var ptsEl = row.querySelector('.dash-ppts');
+    prevPickPts[row.getAttribute('data-idx')] = ptsEl ? parseFloat(ptsEl.getAttribute('data-v') || '0') : 0;
+  });
+
+  function countUp(el, from, to) {
+    if (reduceMotion || Math.abs(to - from) < 0.0001) {
+      el.textContent = to.toFixed(1);
+      return;
+    }
+    var start = null;
+    function frame(ts) {
+      if (!start) start = ts;
+      var p = Math.min(1, (ts - start) / 900);
+      var e = 1 - Math.pow(1 - p, 3);
+      el.textContent = (from + (to - from) * e).toFixed(1);
+      if (p < 1) requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  }
+
+  function pulse(el) {
+    if (reduceMotion || !el) return;
+    el.classList.remove('bump');
+    void el.offsetWidth;  // restart the keyframe animation
+    el.classList.add('bump');
+  }
+
+  function applyDash(d) {
+    if (d.week !== pageWeek) { location.reload(); return; }  // week rollover
+
+    var rankEl = document.getElementById('dash-rank');
+    if (rankEl) rankEl.textContent = '#' + (d.rank || '–');
+
+    var totalEl = document.getElementById('dash-totalv');
+    if (totalEl) {
+      var oldTotal = parseFloat(totalEl.getAttribute('data-v') || '0');
+      var newTotal = d.total || 0;
+      if (Math.abs(oldTotal - newTotal) > 0.0001) {
+        countUp(totalEl, oldTotal, newTotal);
+        pulse(totalEl.closest('.dash-pts'));
+        totalEl.setAttribute('data-v', String(newTotal));
+      }
+    }
+
+    var gapEl = document.getElementById('dash-gap');
+    if (gapEl) {
+      var gt = d.rank === 1 ? 'Leading the league'
+        : (d.gap && d.gap > 0 ? d.gap.toFixed(1) + ' behind ' + d.leader_name : 'Tied at the top');
+      if (gapEl.textContent.trim() !== gt) gapEl.textContent = gt;
+    }
+
+    var lb = document.getElementById('dash-livebadge');
+    if (lb) {
+      lb.classList.toggle('idle', !d.week_live);
+      lb.innerHTML = (d.week_live ? '<span class="live-dot"></span>' : '') +
+        'WEEK ' + d.week + (d.week_live ? ' · LIVE' : '');
+    }
+
+    var nl = document.getElementById('dash-next');
+    var card = document.getElementById('dash-rankcard');
+    if (d.next_lock) {
+      var nhtml = 'Next lock<br><b>' + esc(d.next_lock.matchup) + ' · ' + esc(d.next_lock.label) + '</b>';
+      if (!nl && card) {
+        nl = document.createElement('div');
+        nl.className = 'dash-next';
+        nl.id = 'dash-next';
+        card.appendChild(nl);
+      }
+      if (nl && nl.innerHTML !== nhtml) nl.innerHTML = nhtml;
+    } else if (nl) {
+      nl.remove();
+    }
+
+    donut('dash-d1', 'dash-l1', d.season_pie || []);
+    donut('dash-d2', 'dash-l2', d.week_pie || []);
+
+    (d.picks || []).forEach(function (p, i) {
+      var row = document.querySelector('.dash-pick[data-idx="' + i + '"]');
+      if (!row) return;
+      var ptsEl = row.querySelector('.dash-ppts');
+      var old = prevPickPts[i];
+      if (ptsEl) {
+        if (old !== undefined && Math.abs(old - p.points) > 0.0001) {
+          pulse(row);
+          countUp(ptsEl, old, p.points);
+        } else {
+          ptsEl.textContent = p.points.toFixed(1);
+        }
+      }
+      prevPickPts[i] = p.points;
+      var badge = row.querySelector('.gstatus');
+      if (badge) {
+        var cls = 'gstatus g-' + p.status;
+        if (badge.className !== cls) badge.className = cls;
+        if (badge.textContent !== p.label) badge.textContent = p.label;
+      }
+    });
+
+    var top4El = document.getElementById('dash-top4');
+    if (top4El) {
+      top4El.innerHTML = (d.top4 && d.top4.length) ? d.top4.map(function (t, i) {
+        return '<div class="dash-toprow"><span class="dash-trank">' + (i + 1) + '</span>' +
+          '<span class="dash-pname">' + esc(t.name) + '</span>' +
+          '<span class="dash-team">' + esc(t.team) + '</span>' +
+          '<span class="dash-ppts" style="margin-left:auto">' + t.points.toFixed(1) + '</span></div>';
+      }).join('') : '<p class="muted">No games scored yet.</p>';
+    }
+
+    renderTrend(d.trend || [], !!d.week_live);
+  }
+
+  function pollDash() {
+    if (document.visibilityState !== 'visible') return;
+    fetch('/dashboard.json', {cache: 'no-store'}).then(function (r) {
+      if (r.status === 401) { clearInterval(dashTimer); return null; }
+      if (!r.ok) throw new Error('bad status');
+      return r.json();
+    }).then(function (d) { if (d) applyDash(d); })
+    .catch(function () { /* keep last-known values */ });
+  }
+  var dashTimer = setInterval(pollDash, 60000);
 })();
 </script>
 {% endblock %}

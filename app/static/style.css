@@ -106,9 +106,11 @@ nav a:hover{color:var(--text);background:rgba(255,255,255,.05)}
    script when a member's points differ from the previous poll. */
 .ticker-item.bump{animation:tickbump 1.8s ease-out}
 .ticker-item.bump .pts{animation:tickbump-pts 1.8s ease-out}
+.dash-pick.bump{animation:tickbump 1.8s ease-out}
+.dash-pick.bump .dash-ppts{animation:tickbump-pts 1.8s ease-out}
 @keyframes tickbump{0%{background-color:rgba(245,196,81,.30);box-shadow:0 0 14px rgba(245,196,81,.35)}100%{background-color:transparent;box-shadow:none}}
 @keyframes tickbump-pts{0%,55%{color:#f5c451}100%{color:#45c2ff}}
-@media (prefers-reduced-motion:reduce){.ticker-item.bump,.ticker-item.bump .pts{animation:none}}
+@media (prefers-reduced-motion:reduce){.ticker-item.bump,.ticker-item.bump .pts,.dash-pick.bump,.dash-pick.bump .dash-ppts{animation:none}}
 .ticker-stamp{margin-left:8px;margin-right:24px;font-size:.78rem;color:var(--muted);opacity:.75}
 
 /* ---- Member dashboard ---- */
