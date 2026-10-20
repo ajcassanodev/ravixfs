@@ -403,12 +403,17 @@ def _dashboard_context(con, request):
     season_pie = sorted(season_by_player.values(),
                         key=lambda d: d["points"], reverse=True)
 
-    # This week: picks with live game status.
-    week_total, lines = scoring.member_week_points(con, mid, season, pick_week)
+    # This week: picks with live game status (stints include live subs).
+    stints = scoring.member_week_stints(con, mid, season, pick_week)
+    week_total = round(sum(s["points"] for s in stints), 2)
+    sub_rows = scoring.week_subs(con, mid, season, pick_week)
+    subs_left = max(0, scoring.MAX_SUBS - len(sub_rows))
     states = _gamestate.fetch_states(pick_week)
     now = datetime.now(timezone.utc)
     picks, next_lock = [], None
-    for pid, pname, pteam, src, pts, _st in lines:
+    for st in stints:
+        pid, pname, pteam = st["player_id"], st["name"], st["team"]
+        pts = st["points"]
         game = _gamestate.player_game(pteam, states)
         if game is None:
             status, label = "bye", "Bye"
@@ -420,8 +425,16 @@ def _dashboard_context(con, request):
             ko = _db.player_kickoff(con, pid, season, pick_week)
             label = _et_kickoff_label(ko) if ko else (game["detail"] or "Scheduled")
             status = "upcoming"
-        picks.append({"name": pname, "team": pteam, "src": src,
-                      "points": pts, "status": status, "label": label})
+        picks.append({
+            "name": pname, "team": pteam, "src": st["source"],
+            "player_id": pid, "points": pts, "status": status, "label": label,
+            "subbed_out": not st["active"],
+            "out_label": st["sub"]["game_label"] if st["sub"] else None,
+            "in_label": (st["opened_by"]["game_label"]
+                         if st["opened_by"] else None),
+            "can_sub": bool(st["active"] and status == "live"
+                            and subs_left > 0),
+        })
         ko = _db.player_kickoff(con, pid, season, pick_week)
         if ko:
             kdt = datetime.fromisoformat(ko)
@@ -441,7 +454,7 @@ def _dashboard_context(con, request):
          for p in picks),
         key=lambda d: d["points"], reverse=True)
 
-    # Top 4 performers league-wide this week.
+    # Top 5 performers league-wide this week.
     try:
         pids = [r["player_id"] for r in con.execute(
             "SELECT player_id FROM weekly_stats WHERE season = ? AND week = ? "
@@ -460,13 +473,28 @@ def _dashboard_context(con, request):
             perf.append({"name": prow["name"], "team": prow["team"],
                          "points": pts})
     perf.sort(key=lambda r: (-r["points"], r["name"]))
-    top4 = perf[:4]
+    top5 = perf[:5]
 
     # Weekly trend.
     trend = []
     for w in range(1, pick_week + 1):
         t, _ = scoring.member_week_points(con, mid, season, w)
         trend.append({"week": w, "points": t})
+
+    # Sub history for the MY PICKS header (banked = the closed stint's points).
+    closed = {s["player_id"]: s for s in stints if not s["active"]}
+    subs_hist = []
+    for s in sub_rows:
+        orow = con.execute("SELECT name FROM players WHERE player_id = ?",
+                           (s["out_player_id"],)).fetchone()
+        irow = con.execute("SELECT name FROM players WHERE player_id = ?",
+                           (s["in_player_id"],)).fetchone()
+        out_st = closed.get(s["out_player_id"])
+        subs_hist.append({
+            "label": s["game_label"] or "",
+            "out_name": orow["name"] if orow else s["out_player_id"],
+            "in_name": irow["name"] if irow else s["in_player_id"],
+            "banked": out_st["points"] if out_st else 0.0})
 
     return {
         "member_name": m["name"], "season": season, "week": pick_week,
@@ -476,7 +504,8 @@ def _dashboard_context(con, request):
         "gap": round(leader_total - (total or 0), 2),
         "season_pie": season_pie, "week_pie": week_pie,
         "week_total": week_total, "picks": picks,
-        "top4": top4, "trend": trend,
+        "top5": top5, "trend": trend,
+        "subs_left": subs_left, "subs": subs_hist,
         "next_lock": next_lock[1] if next_lock else None,
         "ticker": _ticker_data(
             con, season,
@@ -519,7 +548,7 @@ def dashboard_json(request: Request):
         "season_pie": ctx["season_pie"],
         "week_pie": ctx["week_pie"],
         "picks": ctx["picks"],
-        "top4": ctx["top4"],
+        "top5": ctx["top5"],
         "trend": ctx["trend"],
         "next_lock": ctx["next_lock"],
     })
@@ -814,6 +843,203 @@ def save_reminders(token: str, phone: str = Form(""), sms_opt_in: str = Form("")
     con.commit()
     con.close()
     return RedirectResponse(f"/dashboard?reminders=saved", status_code=303)
+
+
+# ---- Live substitutions (Week 7 rule) ----
+
+def _sub_game_live(con, prow, season, week, states):
+    """(is_live, clock_label) for a player's game right now.
+
+    ESPN state wins when the feed has the game; otherwise fall back to
+    the kickoff window (started, less than 4 hours ago), like /live.
+    """
+    game = _gamestate.player_game(prow["team"], states) if states else None
+    if game is not None:
+        if game["state"] == "in":
+            return True, _gamestate.live_label(game)
+        return False, None
+    ko = _db.player_kickoff(con, prow["player_id"], season, week)
+    if not ko:
+        return False, None
+    kdt = datetime.fromisoformat(ko)
+    if kdt.tzinfo is None:
+        kdt = kdt.replace(tzinfo=timezone.utc)
+    from datetime import timedelta
+    now = datetime.now(timezone.utc)
+    return (kdt <= now < kdt + timedelta(hours=4)), None
+
+
+def _validate_sub(con, m, season, week, out_pid, in_pid, states):
+    """Validate a proposed sub. Returns (err, info); err is None on success.
+
+    info: {out_row, in_row, label, out_stats, in_stats, out_pts, in_pts,
+    subs_left}. Used by the confirm page (display) and by apply
+    (authoritative re-check at write time).
+    """
+    subs = scoring.week_subs(con, m["id"], season, week)
+    if len(subs) >= scoring.MAX_SUBS:
+        return "You've used both subs this week", None
+    stints = scoring.member_week_stints(con, m["id"], season, week)
+    active = {s["player_id"]: s for s in stints if s["active"]}
+    seen = {s["player_id"] for s in stints}
+    out_stint = active.get(out_pid)
+    if out_stint is None:
+        return "That player isn't in your active lineup", None
+    if in_pid in seen:
+        return "That player is already in (or was in) your lineup this week", None
+    in_row = con.execute(
+        "SELECT * FROM players WHERE player_id = ? "
+        "AND position_group IN ('DB','DL','LB')", (in_pid,)).fetchone()
+    if not in_row:
+        return "Replacement player not found", None
+    out_row = con.execute(
+        "SELECT * FROM players WHERE player_id = ?", (out_pid,)).fetchone()
+    ko_out = _db.player_kickoff(con, out_pid, season, week)
+    ko_in = _db.player_kickoff(con, in_pid, season, week)
+    if not ko_out or not ko_in or ko_out != ko_in:
+        return "The replacement must come from the same kickoff window", None
+    live_out, label = _sub_game_live(con, out_row, season, week, states)
+    live_in, _ = _sub_game_live(con, in_row, season, week, states)
+    if not (live_out and live_in):
+        return "Subs are only allowed while the game is live", None
+    _, out_stats = scoring.player_week_points(con, out_pid, season, week)
+    in_pts, in_stats = scoring.player_week_points(con, in_pid, season, week)
+    return None, {
+        "out_row": out_row, "in_row": in_row, "label": label,
+        "out_stats": out_stats, "in_stats": in_stats,
+        "out_pts": out_stint["points"], "in_pts": in_pts,
+        "subs_left": scoring.MAX_SUBS - len(subs),
+    }
+
+
+def _sub_member_or_404(con, token):
+    m = con.execute("SELECT * FROM members WHERE pick_token = ?",
+                    (token,)).fetchone()
+    if not m:
+        raise HTTPException(404, "bad pick link")
+    return m
+
+
+@app.get("/submit/{token}/sub", response_class=HTMLResponse)
+def sub_choose(request: Request, token: str, out: str = "",
+               err: str = ""):
+    """Sub step 1: choose the replacement (same kickoff window, live only)."""
+    con = _db.connect()
+    m = _sub_member_or_404(con, token)
+    season = _db.current_season(con)
+    week = _db.current_pick_week(con, season)
+    states = _gamestate.fetch_states(week)
+    stints = scoring.member_week_stints(con, m["id"], season, week)
+    active = {s["player_id"]: s for s in stints if s["active"]}
+    seen = {s["player_id"] for s in stints}
+    subs_used = len(scoring.week_subs(con, m["id"], season, week))
+    out_stint = active.get(out)
+    options, out_info = [], None
+    if subs_used >= scoring.MAX_SUBS:
+        err = err or "You've used both subs this week."
+    elif out_stint is None:
+        err = err or "That player isn't in your active lineup."
+    else:
+        out_row = con.execute("SELECT * FROM players WHERE player_id = ?",
+                              (out,)).fetchone()
+        live, label = _sub_game_live(con, out_row, season, week, states)
+        if not live:
+            err = err or "Subs are only allowed while the game is live."
+        else:
+            ko = _db.player_kickoff(con, out, season, week)
+            ko_by_team = {}
+            for g in con.execute(
+                    "SELECT away_team, home_team, kickoff_utc FROM games "
+                    "WHERE season = ? AND week = ?", (season, week)):
+                ko_by_team[g["away_team"]] = g["kickoff_utc"]
+                ko_by_team[g["home_team"]] = g["kickoff_utc"]
+            out_info = {"name": out_stint["name"], "team": out_stint["team"],
+                        "points": out_stint["points"], "label": label,
+                        "player_id": out}
+            for c in con.execute(
+                    "SELECT * FROM players "
+                    "WHERE position_group IN ('DB','DL','LB')").fetchall():
+                if c["player_id"] in seen:
+                    continue
+                if ko_by_team.get(c["team"]) != ko:
+                    continue
+                clive, _ = _sub_game_live(con, c, season, week, states)
+                if not clive:
+                    continue
+                pts, stats = scoring.player_week_points(
+                    con, c["player_id"], season, week)
+                options.append({"player_id": c["player_id"],
+                                "name": c["name"], "team": c["team"],
+                                "position": c["position"],
+                                "points": pts, "stats": stats})
+            options.sort(key=lambda o: (-o["points"], o["name"]))
+    ticker = _ticker_data(
+        con, season,
+        include_test=_is_staging_host(request.headers.get("host", "")))
+    con.close()
+    return templates.TemplateResponse(request, "sub.html", {
+        "request": request, "token": token, "member_name": m["name"],
+        "week": week, "step": "choose", "err": err or None,
+        "out": out_info, "options": options,
+        "subs_left": scoring.MAX_SUBS - subs_used, "ticker": ticker})
+
+
+@app.post("/submit/{token}/sub/review", response_class=HTMLResponse)
+def sub_review(request: Request, token: str, out: str = Form(""),
+               inn: str = Form("")):
+    """Sub step 2: confirm the swap (subs can't be undone)."""
+    con = _db.connect()
+    m = _sub_member_or_404(con, token)
+    season = _db.current_season(con)
+    week = _db.current_pick_week(con, season)
+    states = _gamestate.fetch_states(week)
+    err, info = _validate_sub(con, m, season, week, out, inn, states)
+    if err:
+        con.close()
+        from urllib.parse import quote
+        return RedirectResponse(
+            f"/submit/{token}/sub?out={out}&err={quote(err)}",
+            status_code=303)
+    ticker = _ticker_data(
+        con, season,
+        include_test=_is_staging_host(request.headers.get("host", "")))
+    con.close()
+    return templates.TemplateResponse(request, "sub.html", {
+        "request": request, "token": token, "member_name": m["name"],
+        "week": week, "step": "confirm", "err": None,
+        "out": {"name": info["out_row"]["name"],
+                "team": info["out_row"]["team"],
+                "points": info["out_pts"], "player_id": out},
+        "inn": {"name": info["in_row"]["name"],
+                "team": info["in_row"]["team"],
+                "position": info["in_row"]["position"],
+                "points": info["in_pts"], "player_id": inn},
+        "subs_left": info["subs_left"], "ticker": ticker})
+
+
+@app.post("/submit/{token}/sub/apply")
+def sub_apply(token: str, out: str = Form(""), inn: str = Form("")):
+    """Sub step 3: write the sub (re-validated at write time)."""
+    con = _db.connect()
+    m = _sub_member_or_404(con, token)
+    season = _db.current_season(con)
+    week = _db.current_pick_week(con, season)
+    states = _gamestate.fetch_states(week)
+    err, info = _validate_sub(con, m, season, week, out, inn, states)
+    if err:
+        con.close()
+        from urllib.parse import quote
+        return RedirectResponse(f"/dashboard?suberr={quote(err)}",
+                                status_code=303)
+    con.execute(
+        "INSERT INTO weekly_subs (member_id, season, week, out_player_id, "
+        "in_player_id, subbed_at, game_label, out_stats, in_stats) "
+        "VALUES (?,?,?,?,?,?,?,?,?)",
+        (m["id"], season, week, out, inn, _db.utcnow_iso(), info["label"],
+         json.dumps(info["out_stats"]), json.dumps(info["in_stats"])))
+    con.commit()
+    con.close()
+    return RedirectResponse("/dashboard?subbed=1", status_code=303)
 
 
 # ---------------- admin ----------------

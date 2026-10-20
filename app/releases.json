@@ -1,5 +1,16 @@
 [
   {
+    "date": "2026-10-20",
+    "version": "2026-10-20.1",
+    "title": "Week 7: live substitutions are here",
+    "notes": [
+      "NEW: live substitutions — swap a player mid-game, up to 2 per week. The two dashes in your MY PICKS header on the dashboard are your subs, like timeouts: lit means one is still in your pocket",
+      "The replacement must come from the same kickoff window, and his points start counting from the moment he enters — the player you take out keeps the points he already banked",
+      "Tap SUB on any live pick, choose the replacement, and confirm (subs can't be undone, so the dashboard asks first)",
+      "Top Performers on the dashboard now shows the week's top 5"
+    ]
+  },
+  {
     "date": "2026-10-14",
     "version": "2026-10-14.6",
     "title": "Test-member cards get the full standings treatment",

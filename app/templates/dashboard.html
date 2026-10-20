@@ -40,12 +40,27 @@
   </div>
 
   <div class="dash-card">
-    <div class="dash-cardt">MY PICKS — WEEK {{ week }} <a href="/projections" class="dash-edit" title="Edit picks on the projections page" aria-label="Edit picks">✎</a></div>
+    <div class="dash-cardt">MY PICKS — WEEK {{ week }} <span class="subdashes">{% for i in range(2) %}<span class="subdash{% if i < subs_left %} lit{% endif %}"></span>{% endfor %}<span class="subcount">{% if subs_left %}{{ subs_left }} SUB{% if subs_left > 1 %}S{% endif %} LEFT{% else %}NO SUBS LEFT{% endif %}</span></span> <a href="/projections" class="dash-edit" title="Edit picks on the projections page" aria-label="Edit picks">✎</a></div>
+    {% if request.query_params.get('subbed') %}
+    <p class="ok">Substitution saved — the new player's points count from the moment he entered.</p>
+    {% elif request.query_params.get('suberr') %}
+    <p class="err">{{ request.query_params.get('suberr') }}</p>
+    {% endif %}
+    {% if subs %}
+    <div class="subhist">{% for s in subs %}<div><b>{{ s.label }}</b> — {{ s.in_name }} in for {{ s.out_name }} (banked {{ "%.1f"|format(s.banked) }})</div>{% endfor %}</div>
+    {% endif %}
     {% for p in picks %}
-    <div class="dash-pick" data-idx="{{ loop.index0 }}">
-      <span class="dash-pname">{{ p.name }}</span>
-      <span class="dash-team">{{ p.team }}</span>
-      <span class="dash-pright"><span class="gstatus g-{{ p.status }}">{{ p.label }}</span><span class="dash-ppts" data-v="{{ p.points }}">{{ "%.1f"|format(p.points) }}</span></span>
+    <div class="dash-pick{% if p.subbed_out %} subbed{% endif %}" data-idx="{{ loop.index0 }}">
+      <div class="pick-main">
+        <span class="dash-pname">{{ p.name }}</span>
+        <span class="dash-team">{{ p.team }}</span>
+        <span class="dash-pright">{% if not p.subbed_out %}<span class="gstatus g-{{ p.status }}">{{ p.label }}</span>{% endif %}<span class="dash-ppts" data-v="{{ p.points }}">{{ "%.1f"|format(p.points) }}</span></span>
+      </div>
+      {% if p.subbed_out %}
+      <div class="pick-sub"><span class="subtag">SUBBED OUT{% if p.out_label %} {{ p.out_label }}{% endif %} · BANKED {{ "%.1f"|format(p.points) }}</span></div>
+      {% elif p.in_label or p.can_sub %}
+      <div class="pick-sub">{% if p.in_label %}<span class="subtag in">IN SINCE {{ p.in_label }}</span>{% endif %}{% if p.can_sub %}<a class="subbtn" href="/submit/{{ token }}/sub?out={{ p.player_id }}">SUB</a>{% endif %}</div>
+      {% endif %}
     </div>
     {% else %}
     <p class="muted">No picks yet this week.</p>
@@ -55,8 +70,8 @@
   <div class="dash-grid">
     <div class="dash-card">
       <div class="dash-cardt">TOP PERFORMERS — WEEK {{ week }}</div>
-      <div id="dash-top4">
-      {% for t in top4 %}
+      <div id="dash-top5">
+      {% for t in top5 %}
       <div class="dash-toprow">
         <span class="dash-trank">{{ loop.index }}</span>
         <span class="dash-pname">{{ t.name }}</span>
@@ -266,9 +281,9 @@
       }
     });
 
-    var top4El = document.getElementById('dash-top4');
-    if (top4El) {
-      top4El.innerHTML = (d.top4 && d.top4.length) ? d.top4.map(function (t, i) {
+    var top5El = document.getElementById('dash-top5');
+    if (top5El) {
+      top5El.innerHTML = (d.top5 && d.top5.length) ? d.top5.map(function (t, i) {
         return '<div class="dash-toprow"><span class="dash-trank">' + (i + 1) + '</span>' +
           '<span class="dash-pname">' + esc(t.name) + '</span>' +
           '<span class="dash-team">' + esc(t.team) + '</span>' +

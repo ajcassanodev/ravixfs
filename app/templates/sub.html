@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Substitute a player — Week {{ week }}{% endblock %}
+{% block ticker %}{% include "_ticker.html" %}{% endblock %}
+{% block content %}
+<div class="dash">
+  <div class="dash-head">
+    <div>
+      <div class="dash-eyebrow">PRIME5 · TEST SEASON</div>
+      <h2 class="dash-title">Substitute a player</h2>
+    </div>
+    <div class="dash-live idle">WEEK {{ week }}</div>
+  </div>
+
+  {% if err %}
+  <div class="dash-card">
+    <p class="err" style="margin:0">{{ err }}</p>
+    <p style="margin-top:10px"><a href="/dashboard">← Back to your dashboard</a></p>
+  </div>
+  {% elif step == "choose" %}
+  <div class="dash-card">
+    <div class="dash-cardt">YOU'RE SUBBING OUT</div>
+    <div class="pick-main">
+      <span class="dash-pname">{{ out.name }}</span>
+      <span class="dash-team">{{ out.team }}</span>
+      <span class="dash-pright"><span class="gstatus g-live">{{ out.label }}</span><span class="dash-ppts">{{ "%.1f"|format(out.points) }}</span></span>
+    </div>
+    <p class="note" style="margin-top:8px">He keeps the {{ "%.1f"|format(out.points) }} points he's banked. Pick his replacement below — same kickoff window only, and the new player's points start at 0 from the moment he enters. You have {{ subs_left }} sub{% if subs_left != 1 %}s{% endif %} left.</p>
+  </div>
+  <div class="dash-card">
+    <div class="dash-cardt">CHOOSE THE REPLACEMENT — POINTS SO FAR ARE JUST FORM</div>
+    {% for o in options %}
+    <div class="subopt">
+      <span class="dash-pname">{{ o.name }}</span>
+      <span class="dash-team">{{ o.team }}{% if o.position %} · {{ o.position }}{% endif %}</span>
+      <span class="dash-pright"><span class="muted" style="font-size:.78rem">{{ o.stats.tackles|int }} TKL{% if o.stats.sacks %} · {{ o.stats.sacks|int }} SCK{% endif %}{% if o.stats.interceptions %} · {{ o.stats.interceptions|int }} INT{% endif %}{% if o.stats.forced_fumbles %} · {{ o.stats.forced_fumbles|int }} FF{% endif %}</span><span class="dash-ppts">{{ "%.1f"|format(o.points) }}</span>
+      <form method="post" action="/submit/{{ token }}/sub/review" style="margin:0">
+        <input type="hidden" name="out" value="{{ out.player_id }}">
+        <input type="hidden" name="inn" value="{{ o.player_id }}">
+        <button type="submit" class="subbtn" style="border:none;cursor:pointer">SUB IN</button>
+      </form></span>
+    </div>
+    {% else %}
+    <p class="muted">No eligible replacements in this kickoff window right now.</p>
+    {% endfor %}
+    <p style="margin-top:12px"><a href="/dashboard">← Cancel and back to your dashboard</a></p>
+  </div>
+  {% elif step == "confirm" %}
+  <div class="dash-card">
+    <div class="dash-cardt">CONFIRM SUBSTITUTION</div>
+    <div class="subconfirm">
+      <div class="cfrow"><span class="cflab">OUT</span><span class="cfname">{{ out.name }}</span><span class="cfpts">{{ "%.1f"|format(out.points) }} pts banked</span></div>
+      <div class="cfrow"><span class="cflab in">IN</span><span class="cfname">{{ inn.name }}</span><span class="cfpts">starts at 0</span></div>
+    </div>
+    <p class="note">{{ inn.name }} starts at 0 from the sub. {{ out.name }} keeps his {{ "%.1f"|format(out.points) }} banked points. You'll have {{ subs_left - 1 }} sub{% if subs_left - 1 != 1 %}s{% endif %} left this week. Subs can't be undone.</p>
+    <form method="post" action="/submit/{{ token }}/sub/apply" style="margin-top:12px">
+      <input type="hidden" name="out" value="{{ out.player_id }}">
+      <input type="hidden" name="inn" value="{{ inn.player_id }}">
+      <button type="submit">Confirm sub</button>
+      <a href="/submit/{{ token }}/sub?out={{ out.player_id }}" style="margin-left:12px">Back</a>
+    </form>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+{% block scripts %}
+{% include "_ticker_scripts.html" %}
+{% endblock %}

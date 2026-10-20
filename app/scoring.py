@@ -3,6 +3,7 @@
 Nothing here writes points to the database. Editing scoring_config (via the
 admin page) recalculates every past week automatically.
 """
+import json
 
 STAT_KEYS = (
     "tackles",
@@ -17,6 +18,9 @@ STAT_KEYS = (
 # Weekly picks per member. No draft, no locked players: every week each
 # member picks this many fresh players from the open pool.
 WEEKLY_PICKS = 5
+
+# Live substitutions per member per week (Week 7 rule).
+MAX_SUBS = 2
 
 
 def scoring_map(con) -> dict:
@@ -51,25 +55,108 @@ def player_week_points(con, player_id: str, season: int, week: int):
     return round(pts, 2), stats
 
 
-def member_week_points(con, member_id: int, season: int, week: int):
-    """(total, [(player_id, name, team, source, points, stats)]) for a member-week.
+def week_subs(con, member_id: int, season: int, week: int):
+    """The member's substitution rows for a week, in the order they were made."""
+    try:
+        return con.execute(
+            "SELECT * FROM weekly_subs WHERE member_id = ? AND season = ? "
+            "AND week = ? ORDER BY id", (member_id, season, week)).fetchall()
+    except Exception:
+        return []  # weekly_subs table predates this deploy
 
-    No draft: every week each member picks WEEKLY_PICKS fresh players from
-    the open pool. (Legacy locked_players rows are ignored.)
+
+def _stats_points(stats: dict, cfg: dict) -> float:
+    return sum((stats.get(k, 0) or 0) * cfg.get(k, 0) for k in STAT_KEYS)
+
+
+def member_week_stints(con, member_id: int, season: int, week: int):
+    """Stints for a member-week: the member's picks plus live subs.
+
+    Each stint is a dict: {player_id, name, team, source ('pick'|'sub'),
+    points, stats (the stint's own stat line), active, sub (the
+    weekly_subs row that closed the stint, or None), opened_by (the
+    weekly_subs row that opened it, or None)}.
+
+    A stint scores (end_stats - start_stats) x scoring_config: start is 0
+    for an original pick or the in_stats snapshot for a sub-in; end is the
+    out_stats snapshot for a subbed-out player or the player's current
+    cumulative stats while the stint is still active. So a subbed-out
+    player keeps exactly what he had banked at sub time, and a
+    replacement scores only from the moment he enters. Stints are
+    returned in lineup order: each replacement directly follows the
+    player he replaced.
     """
-    total = 0.0
-    lines = []
+    cfg = scoring_map(con)
     picks = con.execute(
         "SELECT wp.player_id, p.name, p.team FROM weekly_picks wp "
         "JOIN players p ON p.player_id = wp.player_id "
         "WHERE wp.member_id = ? AND wp.season = ? AND wp.week = ?",
         (member_id, season, week),
     ).fetchall()
+    subs = week_subs(con, member_id, season, week)
+
+    by_pid, roots = {}, []
     for pk in picks:
-        pts, stats = player_week_points(con, pk["player_id"], season, week)
-        total += pts
-        lines.append((pk["player_id"], pk["name"], pk["team"], "pick", pts, stats))
-    return round(total, 2), lines
+        st = {"player_id": pk["player_id"], "name": pk["name"],
+              "team": pk["team"], "source": "pick",
+              "start": {k: 0 for k in STAT_KEYS}, "end": None,
+              "active": True, "sub": None, "opened_by": None}
+        by_pid[pk["player_id"]] = st
+        roots.append(st)
+    opened = {}  # sub row id -> stint it opened
+    for s in subs:
+        out = by_pid.get(s["out_player_id"])
+        if out is not None and out["active"]:
+            out["end"] = json.loads(s["out_stats"])
+            out["active"] = False
+            out["sub"] = s
+        prow = con.execute(
+            "SELECT name, team FROM players WHERE player_id = ?",
+            (s["in_player_id"],)).fetchone()
+        nst = {"player_id": s["in_player_id"],
+               "name": prow["name"] if prow else s["in_player_id"],
+               "team": prow["team"] if prow else "",
+               "source": "sub", "start": json.loads(s["in_stats"]),
+               "end": None, "active": True, "sub": None, "opened_by": s}
+        by_pid[s["in_player_id"]] = nst
+        opened[s["id"]] = nst
+
+    ordered = []
+
+    def _emit(st):
+        ordered.append(st)
+        if st["sub"] is not None:
+            nxt = opened.get(st["sub"]["id"])
+            if nxt is not None:
+                _emit(nxt)
+
+    for r in roots:
+        _emit(r)
+
+    for st in ordered:
+        if st["end"] is not None:
+            end = st["end"]
+        else:
+            _, end = player_week_points(con, st["player_id"], season, week)
+        delta = {k: (end.get(k, 0) or 0) - (st["start"].get(k, 0) or 0)
+                 for k in STAT_KEYS}
+        st["stats"] = delta
+        st["points"] = round(_stats_points(delta, cfg), 2)
+    return ordered
+
+
+def member_week_points(con, member_id: int, season: int, week: int):
+    """(total, [(player_id, name, team, source, points, stats)]) for a member-week.
+
+    No draft: every week each member picks WEEKLY_PICKS fresh players from
+    the open pool. (Legacy locked_players rows are ignored.) Live subs
+    (Week 7) turn picks into stints — see member_week_stints.
+    """
+    stints = member_week_stints(con, member_id, season, week)
+    total = round(sum(s["points"] for s in stints), 2)
+    lines = [(s["player_id"], s["name"], s["team"], s["source"],
+              s["points"], s["stats"]) for s in stints]
+    return total, lines
 
 
 def standings(con, season: int, through_week: int | None = None):

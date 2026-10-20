@@ -174,3 +174,26 @@ CREATE TABLE IF NOT EXISTS scoring_events (
 );
 CREATE INDEX IF NOT EXISTS idx_scoring_events_recent
   ON scoring_events (season, week, created_at);
+
+-- Live substitutions (Week 7 rule): a member may swap a player mid-game
+-- for another player in the same kickoff window, up to 2 per week.
+-- Points are never stored for picks, but a sub needs stat snapshots:
+-- out_stats / in_stats are the players' cumulative weekly stats (JSON,
+-- scoring.STAT_KEYS) captured at sub time. Scoring (app/scoring.py) turns
+-- picks + subs into "stints": a stint scores (end - start) x config, so
+-- the subbed-out player keeps what he banked and the replacement scores
+-- only from the moment he enters.
+CREATE TABLE IF NOT EXISTS weekly_subs (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  member_id     INTEGER NOT NULL REFERENCES members(id),
+  season        INTEGER NOT NULL,
+  week          INTEGER NOT NULL,
+  out_player_id TEXT NOT NULL REFERENCES players(player_id),
+  in_player_id  TEXT NOT NULL REFERENCES players(player_id),
+  subbed_at     TEXT NOT NULL,   -- ISO-8601 UTC
+  game_label    TEXT,            -- game clock at sub time, e.g. 'Q3 · 4:12'
+  out_stats     TEXT NOT NULL,   -- JSON cumulative stats of OUT player at sub time
+  in_stats      TEXT NOT NULL    -- JSON cumulative stats of IN player at sub time
+);
+CREATE INDEX IF NOT EXISTS idx_subs_member_week
+  ON weekly_subs(member_id, season, week);
