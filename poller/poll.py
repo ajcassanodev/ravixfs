@@ -261,6 +261,17 @@ def main(check: bool = False):
             # Reminders must never break the stats poll.
             print(f"email reminders skipped: {exc}")
 
+    # ---- CPU auto-pick test members (staging only) ----
+    # CPU Random vs CPU Smart: fills their weekly picks Thursdays from
+    # 9 AM ET until first kickoff. The module gates on the staging DB
+    # path, so this is inert in production. Never breaks the poll.
+    if not check:
+        try:
+            from app import cpu_picks as _cpu
+            print(_cpu.run_cpu_picks(con, season, datetime.now(ET)))
+        except Exception as exc:
+            print(f"cpu picks skipped: {exc}")
+
     # ---- Tank01 trial: live box-score snapshots (one-night MNF trial) ----
     # Rides the 15-min timer; safe no-op without TANK01_API_KEY or outside
     # the trial window. Stores raw payloads for post-game freshness compare.
