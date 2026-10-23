@@ -112,6 +112,10 @@ nav a:hover{color:var(--text);background:rgba(255,255,255,.05)}
 @keyframes tickbump-pts{0%,55%{color:#f5c451}100%{color:#45c2ff}}
 @media (prefers-reduced-motion:reduce){.ticker-item.bump,.ticker-item.bump .pts,.dash-pick.bump,.dash-pick.bump .dash-ppts{animation:none}}
 .ticker-stamp{margin-left:8px;margin-right:24px;font-size:.78rem;color:var(--muted);opacity:.75}
+.ticker-head{display:inline-flex;align-items:center;gap:9px;margin:-2px 20px -2px 0;
+  padding:2px 0 2px 16px;border-left:1px solid var(--line);font-size:.95rem;color:var(--text)}
+.th-tag{background:var(--gold);color:#141414;font-weight:800;font-size:.66rem;
+  letter-spacing:.09em;padding:2px 7px;border-radius:5px}
 
 /* ---- Member dashboard ---- */
 .dash{max-width:960px;margin:0 auto}

@@ -286,6 +286,201 @@ def _is_staging_host(host: str) -> bool:
     return (host or "").lower().startswith("staging.")
 
 
+# ---- Ticker headline ---------------------------------------------------
+# After each set of games (Thu night, Sun 1pm, Sun 4pm, SNF, MNF) the
+# ticker gains a HEADLINE segment summarizing the window that just
+# finished: its top picked player plus what the window did to the week's
+# lead. Windows are kickoff clusters; a window "closes" 3.5h after its
+# last kickoff, when its games are final and the stats have landed. A
+# player's points belong to the window his game kicked off in (subs swap
+# within a window, so stint points stay in-window). Returns "" until a
+# closed window actually has points in it, so the segment never shows
+# stale or empty copy.
+
+def _window_key(kickoff_utc):
+    """((ET date, daypart), kickoff datetime) for a kickoff ISO string."""
+    try:
+        ko = datetime.fromisoformat(str(kickoff_utc).replace("Z", "+00:00"))
+        if ko.tzinfo is None:
+            ko = ko.replace(tzinfo=timezone.utc)
+        from zoneinfo import ZoneInfo
+        local = ko.astimezone(ZoneInfo("America/New_York"))
+    except Exception:
+        return None
+    part = "early" if local.hour < 16 else "late" if local.hour < 19 else "night"
+    return (local.date(), part), ko
+
+
+def _window_label(key) -> str:
+    day, part = key
+    wd = day.weekday()  # Mon=0 .. Sun=6
+    if wd == 6:
+        return {"early": "SUNDAY 1 PM", "late": "SUNDAY 4 PM",
+                "night": "SUNDAY NIGHT"}[part]
+    if wd == 0:
+        return "MONDAY NIGHT" if part == "night" else "MONDAY"
+    if wd == 3:
+        return "THURSDAY NIGHT" if part == "night" else "THURSDAY"
+    if wd == 4:
+        return "FRIDAY NIGHT" if part == "night" else "FRIDAY"
+    if wd == 5:
+        return "SATURDAY NIGHT" if part == "night" else "SATURDAY"
+    return day.strftime("%A").upper()
+
+
+def _headline_desc(stats) -> str:
+    """Short stat-line flavor: 'pick-six', 'interception + sack', '11 tackles'."""
+    if not stats:
+        return "big game"
+
+    def g(k):
+        try:
+            return float(stats.get(k) or 0)
+        except Exception:
+            return 0.0
+
+    parts = []
+    if g("interceptions") >= 1 and g("def_tds") >= 1:
+        parts.append("pick-six")
+    elif g("fumble_recoveries") >= 1 and g("def_tds") >= 1:
+        parts.append("scoop-and-score")
+    elif g("def_tds") >= 1:
+        parts.append("defensive TD")
+    if g("interceptions") >= 1 and "pick-six" not in parts:
+        n = g("interceptions")
+        parts.append("interception" if n == 1 else f"{n:g} interceptions")
+    if g("safeties") >= 1:
+        parts.append("safety")
+    if g("sacks") >= 1:
+        n = g("sacks")
+        parts.append("sack" if n == 1 else f"{n:g} sacks")
+    if g("forced_fumbles") >= 1:
+        parts.append("forced fumble")
+    if g("fumble_recoveries") >= 1 and not any("scoop" in p for p in parts):
+        parts.append("fumble recovery")
+    if len(parts) < 2 and g("tackles") >= 6:
+        parts.append(f"{int(g('tackles'))} tackles")
+    return " + ".join(parts[:2]) if parts else "big game"
+
+
+def _ticker_headline(con, season: int, week: int, entries, member_lines) -> str:
+    """HEADLINE segment text for the ticker, or "" when none is earned yet.
+
+    entries: the ticker's [{name, points}] sorted desc. member_lines:
+    {member name: member_week_points lines for `week`}.
+    """
+    from datetime import timedelta
+    if not week or not entries:
+        return ""
+    games = con.execute(
+        "SELECT kickoff_utc FROM games WHERE season = ? AND week = ?",
+        (season, week)).fetchall()
+    if not games:
+        return ""
+    windows = {}
+    for g in games:
+        got = _window_key(g["kickoff_utc"])
+        if not got:
+            continue
+        key, ko = got
+        w = windows.setdefault(key, {"key": key, "last_ko": ko,
+                                     "gains": {}, "players": {}})
+        w["last_ko"] = max(w["last_ko"], ko)
+    if not windows:
+        return ""
+    ordered = sorted(windows.values(), key=lambda w: w["last_ko"])
+    now = datetime.now(timezone.utc)
+    for w in ordered:
+        w["close"] = w["last_ko"] + timedelta(hours=3, minutes=30)
+    closed = [w for w in ordered if now >= w["close"]]
+    if not closed:
+        return ""
+
+    totals = {e["name"]: e["points"] for e in entries}
+
+    def first(name):
+        # First name for prose; full name when two members share one.
+        fn = name.split()[0] if name else name
+        return name if sum(1 for n in totals if n.split()[0] == fn) > 1 else fn
+
+    for mname, lines in member_lines.items():
+        for pid, pname, _team, _src, pts, stats in lines:
+            if not pts:
+                continue
+            ko = _db.player_kickoff(con, pid, season, week)
+            got = _window_key(ko) if ko else None
+            if not got:
+                continue
+            w = windows.get(got[0])
+            if w is None:
+                continue
+            w["gains"][mname] = round(w["gains"].get(mname, 0.0) + pts, 2)
+            cur = w["players"].get(pid)
+            if cur is None or pts > cur["pts"]:
+                w["players"][pid] = {"name": pname, "pts": pts,
+                                     "stats": stats, "owners": set()}
+            w["players"][pid]["owners"].add(mname)
+
+    active = None
+    for w in reversed(closed):
+        if any(v > 0 for v in w["gains"].values()):
+            active = w
+            break
+    if active is None:
+        return ""
+    is_final = active is ordered[-1]
+    leader = entries[0]["name"]
+    runner = entries[1]["name"] if len(entries) > 1 else None
+    before = {n: round(totals[n] - active["gains"].get(n, 0.0), 2)
+              for n in totals}
+    leader_before = (max(before, key=before.get)
+                     if any(v > 0 for v in before.values()) else None)
+    top = None
+    if active["players"]:
+        top = max(active["players"].values(), key=lambda d: d["pts"])
+    desc = _headline_desc(top["stats"]) if top else ""
+
+    if is_final:
+        a = totals[leader]
+        b = totals[runner] if runner else 0.0
+        if runner is None:
+            lead_clause = f"{first(leader)} wins it, {a:.1f}"
+        elif leader_before and leader_before != leader:
+            lead_clause = f"{first(leader)} beats {first(runner)} {a:.1f}–{b:.1f}"
+        else:
+            lead_clause = f"{first(leader)} holds off {first(runner)} {a:.1f}–{b:.1f}"
+        if top and top["pts"] >= 1.0:
+            if leader in top["owners"]:
+                tail = f"{top['name']}'s {desc} seals it"
+            else:
+                tail = (f"{top['name']}'s {desc} ({top['pts']:.1f} pts) "
+                        f"headlines the finale")
+            return f"WEEK {week} FINAL — {lead_clause}; {tail}"
+        return f"WEEK {week} FINAL — {lead_clause}"
+
+    label = _window_label(active["key"])
+    player_clause = ""
+    if top and top["pts"] >= 1.0:
+        player_clause = f"{top['name']}'s {desc} ({top['pts']:.1f} pts)"
+    owned = bool(top) and leader in top["owners"]
+    if leader_before is None:
+        verb = f"puts {first(leader)} on top early" if owned else None
+        stmt = f"{first(leader)} leads early"
+    elif leader_before != leader:
+        verb = f"lifts {first(leader)} into the lead" if owned else None
+        stmt = f"{first(leader)} takes the lead"
+    else:
+        verb = None
+        stmt = (f"{first(leader)} pads the lead"
+                if active["gains"].get(leader, 0) > 0
+                else f"{first(leader)} stays on top")
+    if player_clause and verb:
+        return f"{label} — {player_clause} {verb}"
+    if player_clause:
+        return f"{label} — {player_clause}; {stmt}"
+    return f"{label} — {stmt}"
+
+
 def _ticker_data(con, season: int, include_test: bool = False) -> dict:
     """Live points data: current (latest-scored) week.
 
@@ -314,12 +509,14 @@ def _ticker_data(con, season: int, include_test: bool = False) -> dict:
         if has_live:
             week = pick_week
     entries = []
+    member_lines = {}
     where = "" if include_test else "WHERE COALESCE(is_test, 0) = 0 "
     for m in con.execute(
         "SELECT id, name FROM members " + where + "ORDER BY name"
     ):
-        pts, _ = scoring.member_week_points(con, m["id"], season, week)
+        pts, lines = scoring.member_week_points(con, m["id"], season, week)
         entries.append({"name": m["name"], "points": pts})
+        member_lines[m["name"]] = lines
     entries.sort(key=lambda e: e["points"], reverse=True)
     # "LIVE" while any game of this week has kicked off and it's the
     # current pick week (i.e. games may still be in progress).
@@ -342,7 +539,12 @@ def _ticker_data(con, season: int, include_test: bool = False) -> dict:
         stamp = datetime.now(ZoneInfo("America/New_York")).strftime("%-I:%M %p ET")
     except Exception:
         stamp = datetime.now(timezone.utc).strftime("%H:%M UTC")
-    return {"week": week, "entries": entries, "live": live, "updated": stamp}
+    try:
+        headline = _ticker_headline(con, season, week, entries, member_lines)
+    except Exception:
+        headline = ""  # the ticker must never break over a headline
+    return {"week": week, "entries": entries, "live": live,
+            "updated": stamp, "headline": headline}
 
 
 @app.get("/ticker.json")

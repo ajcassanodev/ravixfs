@@ -1,6 +1,16 @@
 [
   {
     "date": "2026-10-23",
+    "version": "2026-10-23.4",
+    "title": "Ticker headlines after every set of games",
+    "notes": [
+      "NEW: the points ticker now carries a HEADLINE after the week scores — written automatically from the game data, no typing by anyone",
+      "It swaps after each set of games: Thursday night, Sunday 1 PM, Sunday 4 PM, Sunday night, and Monday night — naming the window's top player and what happened to the week's lead",
+      "After the last game it becomes the WEEK FINAL headline with the winner's score"
+    ]
+  },
+  {
+    "date": "2026-10-23",
     "version": "2026-10-23.3",
     "title": "Scoring summary on your dashboard",
     "notes": [
