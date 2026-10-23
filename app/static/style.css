@@ -278,7 +278,6 @@ code{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;font-size:.85em
 .sum-big .sum-play{color:#eef3f8}
 .sum-when{margin-left:auto;color:var(--muted);font-size:.75rem;white-space:nowrap}
 .sum-pts{color:var(--cyan);font-weight:700;white-space:nowrap}
-.sum-note{margin:.5rem 0 0}
 
 /* Live game status badges (/live) */
 .live-sub{color:var(--muted);margin:.2rem 0 1rem}

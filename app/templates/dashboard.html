@@ -68,7 +68,7 @@
   </div>
 
   <div class="dash-card">
-    <div class="dash-cardt">SCORING SUMMARY — WEEK {{ week }}</div>
+    <div class="dash-cardt">MY SCORING SUMMARY — WEEK {{ week }}</div>
     <div id="dash-sumrows">
     {% for s in summary %}
     <div class="sum-row{% if s.big %} sum-big{% endif %}"><span class="sum-player">{{ s.name }}</span><span class="dash-team">{{ s.team }}</span><span class="sum-play">{{ s.play }}</span><span class="sum-when">{{ s.when }}</span><span class="sum-pts">+{{ "%.1f"|format(s.points) }}</span></div>
@@ -76,7 +76,6 @@
     <p class="muted">No scoring plays yet this week.</p>
     {% endfor %}
     </div>
-    <p class="muted sum-note">Your picks only, newest first. Big plays listed one by one; tackles grouped per player so the list stays readable.</p>
   </div>
 
   <div class="dash-grid">
