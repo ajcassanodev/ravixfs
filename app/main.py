@@ -466,6 +466,13 @@ def _dashboard_context(con, request):
             d["points"] = round(d["points"] + pts, 2)
     season_pie = sorted(season_by_player.values(),
                         key=lambda d: d["points"], reverse=True)
+    if len(season_pie) > 5:
+        # Top 5 contributors only; everyone else folds into one "Other"
+        # slice so the donut still adds up to the true season total.
+        rest = round(sum(d["points"] for d in season_pie[5:]), 2)
+        season_pie = season_pie[:5]
+        if rest > 0:
+            season_pie.append({"name": "Other", "team": "", "points": rest})
 
     # This week: picks with live game status (stints include live subs).
     stints = scoring.member_week_stints(con, mid, season, pick_week)
