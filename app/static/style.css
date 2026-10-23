@@ -262,6 +262,14 @@ code{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;font-size:.85em
 .mubadge.good{color:#4ade80;background:rgba(74,222,128,.10);border:1px solid rgba(74,222,128,.35)}
 .mubadge.bad{color:var(--muted);background:rgba(255,255,255,.03);border:1px solid var(--line)}
 
+/* Player roster-status chips (projections, dashboard picks, /live) */
+.pstatus{display:inline-block;font-size:.68rem;font-weight:600;line-height:1.35;
+  padding:1px 7px;border-radius:999px;margin-left:6px;vertical-align:middle;white-space:nowrap}
+.pstatus::before{content:"●";margin-right:4px;font-size:.55rem;vertical-align:2px}
+.pstatus.ps-ok{color:#4ade80;background:rgba(74,222,128,.10);border:1px solid rgba(74,222,128,.35)}
+.pstatus.ps-out{color:#f87171;background:rgba(248,113,113,.10);border:1px solid rgba(248,113,113,.45)}
+.pstatus.ps-warn{color:#f5c451;background:rgba(245,196,81,.10);border:1px solid rgba(245,196,81,.4)}
+
 /* Live game status badges (/live) */
 .live-sub{color:var(--muted);margin:.2rem 0 1rem}
 .live-dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--red);

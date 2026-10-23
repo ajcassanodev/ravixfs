@@ -218,6 +218,28 @@ def standings(con, season: int, through_week: int | None = None):
     return table, test_table
 
 
+def status_chip(status):
+    """Display chip for a player's roster status (players.status).
+
+    Members should always be able to tell whether a player can actually
+    play: returns {"label", "kind"} with kind ok | out | warn. Active
+    (or unknown-but-rostered) players read Ready; reserve/inactive/PUP
+    read as out; anything else gets a warning chip with a friendly label.
+    """
+    s = (status or "").upper()
+    if s in ("", "ACT"):
+        return {"label": "Ready", "kind": "ok"}
+    if s == "RES":
+        return {"label": "IR", "kind": "out"}
+    if s == "INA":
+        return {"label": "Inactive", "kind": "out"}
+    if s == "PUP":
+        return {"label": "PUP", "kind": "out"}
+    labels = {"SUS": "Suspended", "DEV": "Practice squad",
+              "NFI": "NFI · Out", "EXE": "Exempt"}
+    return {"label": labels.get(s, s.title()), "kind": "warn"}
+
+
 def projections(con, season: int, through_week: int):
     """Per-player projected weekly Prime5 points.
 

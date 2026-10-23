@@ -1,6 +1,16 @@
 [
   {
     "date": "2026-10-23",
+    "version": "2026-10-23.2",
+    "title": "Player status chips — see who's ready and who's out",
+    "notes": [
+      "Every player now carries a status chip wherever his name appears — the projections page, your dashboard picks, and the live page",
+      "Green Ready means he's active and available; IR, Inactive and PUP chips flag the players who can't score for you this week",
+      "Status comes from the official league roster feed and refreshes automatically, so a mid-week injury shows up on your own lineup too"
+    ]
+  },
+  {
+    "date": "2026-10-23",
     "version": "2026-10-23.1",
     "title": "Substitution engagement report for the commissioner",
     "notes": [

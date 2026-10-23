@@ -53,7 +53,7 @@
     <div class="dash-pick{% if p.subbed_out %} subbed{% endif %}" data-idx="{{ loop.index0 }}">
       <div class="pick-main">
         <span class="dash-pname">{{ p.name }}</span>
-        <span class="dash-team">{{ p.team }}</span>
+        <span class="dash-team">{{ p.team }}</span>{% if p.chip %}<span class="pstatus ps-{{ p.chip.kind }}">{{ p.chip.label }}</span>{% endif %}
         <span class="dash-pright">{% if not p.subbed_out %}<span class="gstatus g-{{ p.status }}">{{ p.label }}</span>{% endif %}<span class="dash-ppts" data-v="{{ p.points }}">{{ "%.1f"|format(p.points) }}</span></span>
       </div>
       {% if p.subbed_out %}

@@ -14,7 +14,7 @@
   <tr><th>Player</th><th>Team</th><th>Pts</th><th>Status</th></tr>
   {% for p in m.picks %}
   <tr>
-    <td>{{ p.name }}</td><td>{{ p.team }}</td>
+    <td>{{ p.name }}{% if p.chip %}<span class="pstatus ps-{{ p.chip.kind }}">{{ p.chip.label }}</span>{% endif %}</td><td>{{ p.team }}</td>
     <td><strong>{{ "%.1f"|format(p.points) }}</strong></td>
     <td><span class="gstatus g-{{ p.status }}">{{ p.label }}</span></td>
   </tr>

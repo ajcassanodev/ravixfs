@@ -425,9 +425,12 @@ def _dashboard_context(con, request):
             ko = _db.player_kickoff(con, pid, season, pick_week)
             label = _et_kickoff_label(ko) if ko else (game["detail"] or "Scheduled")
             status = "upcoming"
+        prow = con.execute(
+            "SELECT status FROM players WHERE player_id = ?", (pid,)).fetchone()
         picks.append({
             "name": pname, "team": pteam, "src": st["source"],
             "player_id": pid, "points": pts, "status": status, "label": label,
+            "chip": scoring.status_chip(prow["status"] if prow else ""),
             "subbed_out": not st["active"],
             "out_label": st["sub"]["game_label"] if st["sub"] else None,
             "in_label": (st["opened_by"]["game_label"]
@@ -758,9 +761,13 @@ def live_view(request: Request):
                 ko = _db.player_kickoff(con, pid, season, week)
                 label = _et_kickoff_label(ko) if ko else (game["detail"] or "Scheduled")
                 status = "upcoming"
+            prow = con.execute(
+                "SELECT status FROM players WHERE player_id = ?",
+                (pid,)).fetchone()
             picks.append({
                 "name": pname, "team": pteam, "src": src,
                 "points": pts, "status": status, "label": label,
+                "chip": scoring.status_chip(prow["status"] if prow else ""),
             })
         members.append({"name": m["name"], "total": total, "picks": picks})
     members.sort(key=lambda e: e["total"], reverse=True)
@@ -1254,6 +1261,7 @@ def _projections_context(con, request, token="", sort="proj", dir="",
     # per-row pick state for the template
     for r in rows:
         pid = r["player_id"]
+        r["chip"] = scoring.status_chip(r["status"])
         if pid in picked_ids:
             r["state"] = "picked"
         else:
