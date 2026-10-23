@@ -354,6 +354,70 @@ def ticker_json(request: Request):
     return JSONResponse(data)
 
 
+_SUMMARY_PLAYS = {
+    "sacks": ("Sack", "Sacks"),
+    "interceptions": ("Interception", "Interceptions"),
+    "forced_fumbles": ("Forced fumble", "Forced fumbles"),
+    "fumble_recoveries": ("Fumble recovery", "Fumble recoveries"),
+    "safeties": ("Safety", "Safeties"),
+    "def_tds": ("Defensive TD", "Defensive TDs"),
+}
+
+
+def _et_event_label(iso_ts):
+    """'Thu 9:41 PM' in Eastern for a scoring event timestamp."""
+    try:
+        dt = datetime.fromisoformat(iso_ts.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        from zoneinfo import ZoneInfo
+        return dt.astimezone(ZoneInfo("America/New_York")).strftime("%a %-I:%M %p")
+    except Exception:
+        return ""
+
+
+def _scoring_summary(con, mid, season, week, limit=12):
+    """The member's scoring plays for the week, newest first.
+
+    Built from scoring_events (the same feed as the scoring popups) for
+    the member's weekly picks, so the plays stay reviewable after the
+    popup fades. Big plays stay individual; tackle events are grouped
+    per player so the list isn't drowned in +0.1 rows.
+    """
+    rows = con.execute(
+        "SELECT e.player_id, e.stat_key, e.old_total, e.new_total, "
+        "e.points_delta, e.created_at, p.name, p.team "
+        "FROM scoring_events e JOIN players p ON p.player_id = e.player_id "
+        "JOIN weekly_picks wp ON wp.player_id = e.player_id "
+        "AND wp.member_id = ? AND wp.season = e.season AND wp.week = e.week "
+        "WHERE e.season = ? AND e.week = ? ORDER BY e.created_at DESC",
+        (mid, season, week)).fetchall()
+    out, tackles = [], {}
+    for r in rows:
+        delta = round(r["new_total"] - r["old_total"], 2)
+        if r["stat_key"] == "tackles":
+            g = tackles.setdefault(r["player_id"], {
+                "name": r["name"], "team": r["team"], "big": False,
+                "count": 0.0, "points": 0.0, "at": r["created_at"]})
+            g["count"] += delta
+            g["points"] = round(g["points"] + r["points_delta"], 2)
+            continue
+        sing, plur = _SUMMARY_PLAYS.get(
+            r["stat_key"], (r["stat_key"], r["stat_key"]))
+        play = sing if delta <= 1 else f"{plur} ×{delta:g}"
+        out.append({"name": r["name"], "team": r["team"], "big": True,
+                    "play": play, "points": r["points_delta"],
+                    "at": r["created_at"]})
+    for g in tackles.values():
+        n = g.pop("count")
+        g["play"] = "Tackle" if n == 1 else f"Tackles ×{n:g}"
+        out.append(g)
+    out.sort(key=lambda e: e["at"], reverse=True)
+    for e in out:
+        e["when"] = _et_event_label(e.pop("at"))
+    return out[:limit]
+
+
 def _dashboard_context(con, request):
     """Dashboard context for a signed-in member, or None.
 
@@ -509,6 +573,7 @@ def _dashboard_context(con, request):
         "week_total": week_total, "picks": picks,
         "top5": top5, "trend": trend,
         "subs_left": subs_left, "subs": subs_hist,
+        "summary": _scoring_summary(con, mid, season, pick_week),
         "next_lock": next_lock[1] if next_lock else None,
         "ticker": _ticker_data(
             con, season,
@@ -553,6 +618,7 @@ def dashboard_json(request: Request):
         "picks": ctx["picks"],
         "top5": ctx["top5"],
         "trend": ctx["trend"],
+        "summary": ctx["summary"],
         "next_lock": ctx["next_lock"],
     })
 

@@ -67,6 +67,18 @@
     {% endfor %}
   </div>
 
+  <div class="dash-card">
+    <div class="dash-cardt">SCORING SUMMARY — WEEK {{ week }}</div>
+    <div id="dash-sumrows">
+    {% for s in summary %}
+    <div class="sum-row{% if s.big %} sum-big{% endif %}"><span class="sum-player">{{ s.name }}</span><span class="dash-team">{{ s.team }}</span><span class="sum-play">{{ s.play }}</span><span class="sum-when">{{ s.when }}</span><span class="sum-pts">+{{ "%.1f"|format(s.points) }}</span></div>
+    {% else %}
+    <p class="muted">No scoring plays yet this week.</p>
+    {% endfor %}
+    </div>
+    <p class="muted sum-note">Your picks only, newest first. Big plays listed one by one; tackles grouped per player so the list stays readable.</p>
+  </div>
+
   <div class="dash-grid">
     <div class="dash-card">
       <div class="dash-cardt">TOP PERFORMERS — WEEK {{ week }}</div>
@@ -289,6 +301,18 @@
           '<span class="dash-team">' + esc(t.team) + '</span>' +
           '<span class="dash-ppts" style="margin-left:auto">' + t.points.toFixed(1) + '</span></div>';
       }).join('') : '<p class="muted">No games scored yet.</p>';
+    }
+
+    var sumEl = document.getElementById('dash-sumrows');
+    if (sumEl && d.summary) {
+      sumEl.innerHTML = d.summary.length ? d.summary.map(function (s) {
+        return '<div class="sum-row' + (s.big ? ' sum-big' : '') + '">' +
+          '<span class="sum-player">' + esc(s.name) + '</span>' +
+          '<span class="dash-team">' + esc(s.team) + '</span>' +
+          '<span class="sum-play">' + esc(s.play) + '</span>' +
+          '<span class="sum-when">' + esc(s.when) + '</span>' +
+          '<span class="sum-pts">+' + s.points.toFixed(1) + '</span></div>';
+      }).join('') : '<p class="muted">No scoring plays yet this week.</p>';
     }
 
     renderTrend(d.trend || [], !!d.week_live);

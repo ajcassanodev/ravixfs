@@ -270,6 +270,16 @@ code{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;font-size:.85em
 .pstatus.ps-out{color:#f87171;background:rgba(248,113,113,.10);border:1px solid rgba(248,113,113,.45)}
 .pstatus.ps-warn{color:#f5c451;background:rgba(245,196,81,.10);border:1px solid rgba(245,196,81,.4)}
 
+/* Scoring summary rows (dashboard card under MY PICKS) */
+.sum-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:.88rem}
+.sum-row:last-child{border-bottom:none}
+.sum-player{font-weight:600}
+.sum-play{color:var(--muted)}
+.sum-big .sum-play{color:#eef3f8}
+.sum-when{margin-left:auto;color:var(--muted);font-size:.75rem;white-space:nowrap}
+.sum-pts{color:var(--cyan);font-weight:700;white-space:nowrap}
+.sum-note{margin:.5rem 0 0}
+
 /* Live game status badges (/live) */
 .live-sub{color:var(--muted);margin:.2rem 0 1rem}
 .live-dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--red);

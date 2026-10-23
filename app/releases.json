@@ -1,6 +1,16 @@
 [
   {
     "date": "2026-10-23",
+    "version": "2026-10-23.3",
+    "title": "Scoring summary on your dashboard",
+    "notes": [
+      "NEW: a Scoring Summary card sits right under MY PICKS — every scoring play by your players this week, newest first, so you can review what the popups showed after they fade",
+      "Big plays (sacks, interceptions, forced fumbles and more) are listed one by one; tackles are grouped per player so the list stays readable",
+      "The card refreshes on its own while games are live, just like the rest of your dashboard"
+    ]
+  },
+  {
+    "date": "2026-10-23",
     "version": "2026-10-23.2",
     "title": "Player status chips — see who's ready and who's out",
     "notes": [
