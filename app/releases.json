@@ -1,5 +1,14 @@
 [
   {
+    "date": "2026-10-23",
+    "version": "2026-10-23.1",
+    "title": "Substitution engagement report for the commissioner",
+    "notes": [
+      "The admin participation report now tracks the Week 7 substitution feature: who used their subs, when each swap happened, the points banked, what the replacement earned, and whether the swap gained points",
+      "It also follows the flow — how many members opened the sub screen and reached the confirm step — so we can see if the feature is easy to find and use"
+    ]
+  },
+  {
     "date": "2026-10-20",
     "version": "2026-10-20.1",
     "title": "Week 7: live substitutions are here",

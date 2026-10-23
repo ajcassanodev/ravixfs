@@ -847,6 +847,23 @@ def save_reminders(token: str, phone: str = Form(""), sms_opt_in: str = Form("")
 
 # ---- Live substitutions (Week 7 rule) ----
 
+def _log_sub_event(con, m, season, week, event, out_pid="", in_pid="",
+                   detail=""):
+    """Record one step of sub-flow engagement (admin report funnel).
+
+    Best-effort: a logging failure must never break the member's flow.
+    """
+    try:
+        con.execute(
+            "INSERT INTO sub_events (member_id, season, week, event, "
+            "out_player_id, in_player_id, detail, created_at) "
+            "VALUES (?,?,?,?,?,?,?,?)",
+            (m["id"], season, week, event, out_pid or "", in_pid or "",
+             detail or "", _db.utcnow_iso()))
+        con.commit()
+    except Exception:
+        pass
+
 def _sub_game_live(con, prow, season, week, states):
     """(is_live, clock_label) for a player's game right now.
 
@@ -973,6 +990,8 @@ def sub_choose(request: Request, token: str, out: str = "",
                                 "position": c["position"],
                                 "points": pts, "stats": stats})
             options.sort(key=lambda o: (-o["points"], o["name"]))
+    if out_info is not None:
+        _log_sub_event(con, m, season, week, "choose", out_pid=out)
     ticker = _ticker_data(
         con, season,
         include_test=_is_staging_host(request.headers.get("host", "")))
@@ -1000,6 +1019,7 @@ def sub_review(request: Request, token: str, out: str = Form(""),
         return RedirectResponse(
             f"/submit/{token}/sub?out={out}&err={quote(err)}",
             status_code=303)
+    _log_sub_event(con, m, season, week, "review", out_pid=out, in_pid=inn)
     ticker = _ticker_data(
         con, season,
         include_test=_is_staging_host(request.headers.get("host", "")))
@@ -1027,6 +1047,8 @@ def sub_apply(token: str, out: str = Form(""), inn: str = Form("")):
     states = _gamestate.fetch_states(week)
     err, info = _validate_sub(con, m, season, week, out, inn, states)
     if err:
+        _log_sub_event(con, m, season, week, "rejected", out_pid=out,
+                       in_pid=inn, detail=err)
         con.close()
         from urllib.parse import quote
         return RedirectResponse(f"/dashboard?suberr={quote(err)}",
@@ -1037,6 +1059,11 @@ def sub_apply(token: str, out: str = Form(""), inn: str = Form("")):
         "VALUES (?,?,?,?,?,?,?,?,?)",
         (m["id"], season, week, out, inn, _db.utcnow_iso(), info["label"],
          json.dumps(info["out_stats"]), json.dumps(info["in_stats"])))
+    con.execute(
+        "INSERT INTO sub_events (member_id, season, week, event, "
+        "out_player_id, in_player_id, detail, created_at) "
+        "VALUES (?,?,?,'applied',?,?,?,?)",
+        (m["id"], season, week, out, inn, "", _db.utcnow_iso()))
     con.commit()
     con.close()
     return RedirectResponse("/dashboard?subbed=1", status_code=303)
@@ -1122,10 +1149,43 @@ def admin_participation(request: Request, token: str, week: int = 0):
                 "sms_sent": _et_stamp(sms["sent_at"]) if sms else "",
                 "email_sent": _et_stamp(email["sent_at"]) if email else "",
             })
+    # Substitution engagement for the selected week (Week 7 feature).
+    sub_rows, sub_summary = [], None
+    if week:
+        funnel = {"choose": 0, "review": 0, "applied": 0, "rejected": 0}
+        try:
+            for r in con.execute(
+                    "SELECT event, COUNT(*) c FROM sub_events "
+                    "WHERE season=? AND week=? GROUP BY event",
+                    (season, week)):
+                if r["event"] in funnel:
+                    funnel[r["event"]] = r["c"]
+        except Exception:
+            pass  # sub_events predates this deploy
+        total_subs, members_with = 0, 0
+        for m in con.execute("SELECT * FROM members ORDER BY name").fetchall():
+            outs = scoring.sub_outcomes(con, m["id"], season, week)
+            season_used = con.execute(
+                "SELECT COUNT(*) c FROM weekly_subs "
+                "WHERE member_id=? AND season=?",
+                (m["id"], season)).fetchone()["c"]
+            for o in outs:
+                o["when"] = _et_stamp(o["subbed_at"])
+            total_subs += len(outs)
+            members_with += 1 if outs else 0
+            sub_rows.append({
+                "name": m["name"], "is_test": m["is_test"],
+                "used": len(outs), "subs": outs,
+                "net": round(sum(o["net"] for o in outs), 2),
+                "season_used": season_used})
+        sub_summary = {"total_subs": total_subs,
+                       "members_with": members_with,
+                       "members": len(sub_rows), "funnel": funnel}
     con.close()
     return templates.TemplateResponse(request, "participation.html", {
         "request": request, "token": token, "season": season,
         "weeks": weeks, "week": week, "rows": rows,
+        "sub_rows": sub_rows, "sub_summary": sub_summary,
     })
 
 

@@ -23,4 +23,20 @@
 {% else %}
 <p>No picks recorded yet this season.</p>
 {% endif %}
+{% if sub_summary %}
+<h3>Live substitutions — Week {{ week }}</h3>
+<p><strong>{{ sub_summary.members_with }} of {{ sub_summary.members }} members</strong> used a sub · <strong>{{ sub_summary.total_subs }}</strong> subs total{% if sub_summary.funnel.choose or sub_summary.funnel.review or sub_summary.funnel.rejected %} · Flow: {{ sub_summary.funnel.choose }} opened the sub screen → {{ sub_summary.funnel.review }} reached confirm → {{ sub_summary.funnel.applied }} completed{% if sub_summary.funnel.rejected %}, {{ sub_summary.funnel.rejected }} blocked{% endif %}{% endif %}</p>
+<table>
+  <tr><th>Member</th><th>Test?</th><th>Subs used</th><th>Season subs</th><th>Details (ET)</th><th>Net so far</th></tr>
+  {% for r in sub_rows %}
+  <tr><td>{{ r.name }}</td>
+      <td>{% if r.is_test %}yes{% else %}—{% endif %}</td>
+      <td>{{ r.used }}/2</td>
+      <td>{{ r.season_used }}</td>
+      <td>{% for s in r.subs %}{{ s.when }}{% if s.game_label %} · {{ s.game_label }}{% endif %} — {{ s.out_name }} out (banked {{ "%.1f"|format(s.banked) }}) → {{ s.in_name }} in (earned {{ "%.1f"|format(s.earned) }})<br>{% else %}—{% endfor %}</td>
+      <td>{% if r.subs %}{{ "%+.1f"|format(r.net) }}{% else %}—{% endif %}</td></tr>
+  {% endfor %}
+</table>
+<p class="note">Net = what the replacement earned after entering minus what the subbed-out player scored after the sub moment — positive means the sub gained points. Flow counts (opened / confirm / completed / blocked) are tracked from Oct 23; completed subs are counted for the whole week.</p>
+{% endif %}
 {% endblock %}

@@ -145,6 +145,37 @@ def member_week_stints(con, member_id: int, season: int, week: int):
     return ordered
 
 
+def sub_outcomes(con, member_id: int, season: int, week: int):
+    """Per-sub outcome lines for a member-week, in the order subs were made.
+
+    Each: {subbed_at, game_label, out_name, in_name, banked, earned, net}.
+    banked = points the subbed-out player kept (his closed stint);
+    earned = points the replacement scored from the moment he entered
+    (his stint); net = earned minus what the subbed-out player scored
+    after the sub moment — positive means the sub gained points. While
+    games are still in progress all three are "so far" numbers.
+    """
+    cfg = scoring_map(con)
+    stints = member_week_stints(con, member_id, season, week)
+    by_pid = {s["player_id"]: s for s in stints}
+    out = []
+    for s in week_subs(con, member_id, season, week):
+        ost = by_pid.get(s["out_player_id"])
+        ist = by_pid.get(s["in_player_id"])
+        out_final, _ = player_week_points(con, s["out_player_id"],
+                                          season, week)
+        snap_pts = _stats_points(json.loads(s["out_stats"]), cfg)
+        banked = ost["points"] if ost else round(snap_pts, 2)
+        earned = ist["points"] if ist else 0.0
+        out.append({
+            "subbed_at": s["subbed_at"], "game_label": s["game_label"],
+            "out_name": ost["name"] if ost else s["out_player_id"],
+            "in_name": ist["name"] if ist else s["in_player_id"],
+            "banked": banked, "earned": earned,
+            "net": round(earned - (out_final - snap_pts), 2)})
+    return out
+
+
 def member_week_points(con, member_id: int, season: int, week: int):
     """(total, [(player_id, name, team, source, points, stats)]) for a member-week.
 

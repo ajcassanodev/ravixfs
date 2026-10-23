@@ -197,3 +197,22 @@ CREATE TABLE IF NOT EXISTS weekly_subs (
 );
 CREATE INDEX IF NOT EXISTS idx_subs_member_week
   ON weekly_subs(member_id, season, week);
+
+-- Sub-flow engagement events (Week 7 feature tracking): one row per step
+-- a member reaches in the substitution flow, powering the funnel on the
+-- admin participation report (opened the sub screen / reached confirm /
+-- completed / blocked). Completed subs live in weekly_subs; the funnel
+-- counts only start at the deploy that adds this table.
+CREATE TABLE IF NOT EXISTS sub_events (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  member_id     INTEGER NOT NULL REFERENCES members(id),
+  season        INTEGER NOT NULL,
+  week          INTEGER NOT NULL,
+  event         TEXT NOT NULL,   -- choose | review | applied | rejected
+  out_player_id TEXT,
+  in_player_id  TEXT,
+  detail        TEXT,            -- rejection reason for 'rejected'
+  created_at    TEXT NOT NULL    -- ISO-8601 UTC
+);
+CREATE INDEX IF NOT EXISTS idx_sub_events_week
+  ON sub_events(season, week, event);
