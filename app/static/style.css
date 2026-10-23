@@ -116,6 +116,45 @@ nav a:hover{color:var(--text);background:rgba(255,255,255,.05)}
   padding:2px 0 2px 16px;border-left:1px solid var(--line);font-size:.95rem;color:var(--text)}
 .th-tag{background:var(--gold);color:#141414;font-weight:800;font-size:.66rem;
   letter-spacing:.09em;padding:2px 7px;border-radius:5px}
+.th-link{color:inherit;text-decoration:none;border-bottom:1px dotted var(--gold)}
+.th-link:hover{color:var(--gold)}
+
+/* ---- League News ---- */
+.news-post{background:linear-gradient(180deg,rgba(120,180,220,.05),rgba(120,180,220,.015));
+  border:1px solid var(--line);border-radius:12px;padding:18px;margin:0 0 18px;
+  scroll-margin-top:90px}
+.news-head{font-family:'Space Grotesk',sans-serif;font-size:1.28rem;line-height:1.3;margin:0 0 6px}
+.news-meta{display:flex;gap:14px;flex-wrap:wrap;color:var(--muted);font-size:.82rem;margin-bottom:10px}
+.news-author{color:var(--cyan);font-weight:700}
+.news-author.commish{color:var(--gold)}
+.news-body{margin:0 0 10px;line-height:1.5}
+.news-body:last-of-type{margin-bottom:0}
+.news-comments{margin-top:14px;border-top:1px solid var(--line);padding-top:12px;
+  display:flex;flex-direction:column;gap:10px}
+.news-comment{background:rgba(10,14,20,.45);border:1px solid var(--line);
+  border-radius:10px;padding:10px 12px}
+.news-comment-meta{display:flex;gap:10px;align-items:baseline;margin-bottom:4px}
+.news-comment-meta b{color:var(--text)}
+.news-comment-meta span{color:var(--muted);font-size:.78rem}
+.news-comment p{margin:0;line-height:1.45;white-space:pre-wrap;overflow-wrap:break-word}
+.news-reply{margin:14px 0 0;display:flex;flex-direction:column;gap:8px}
+.news-reply-label{font-size:.85rem;font-weight:600}
+.news-reply textarea,.news-admin-form textarea,.news-admin-form input[type="text"]{
+  width:100%;font-size:1rem;padding:.5rem .6rem;background:#0d1320;
+  border:1px solid var(--line);color:var(--text);border-radius:8px;
+  font-family:inherit;resize:vertical}
+.news-reply textarea:focus,.news-admin-form textarea:focus,
+.news-admin-form input[type="text"]:focus{outline:none;border-color:var(--cyan)}
+.news-reply button{align-self:flex-start;min-height:44px;padding:8px 18px}
+.news-signin{margin:12px 0 0}
+.news-admin-form{display:flex;flex-direction:column;gap:12px;max-width:720px}
+.news-admin-form label{display:flex;flex-direction:column;gap:6px;font-size:.9rem}
+.news-admin-form button{align-self:flex-start;min-height:44px;padding:8px 20px}
+.news-admin-row{display:flex;justify-content:space-between;align-items:center;gap:12px;
+  border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:0 0 8px}
+.news-admin-main{display:flex;flex-direction:column;gap:2px}
+.news-admin-row form{margin:0}
+.news-admin-row button{min-height:40px}
 
 /* ---- Member dashboard ---- */
 .dash{max-width:960px;margin:0 auto}

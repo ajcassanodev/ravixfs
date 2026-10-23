@@ -20,7 +20,11 @@
       h += '<span class="ticker-item"><b></b><span class="pts"></span></span>';
     });
     if (d.headline) {
-      h += '<span class="ticker-head"><span class="th-tag">HEADLINE</span><span class="th-text"></span></span>';
+      h += '<span class="ticker-head"><span class="th-tag">HEADLINE</span>' +
+        (d.headline_id
+          ? '<a class="th-link" href="/news#post-' + d.headline_id + '"><span class="th-text"></span></a>'
+          : '<span class="th-text"></span>') +
+        '</span>';
     }
     h += '<span class="ticker-stamp">updated ' + d.updated + '</span></div>';
     return h;

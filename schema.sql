@@ -216,3 +216,38 @@ CREATE TABLE IF NOT EXISTS sub_events (
 );
 CREATE INDEX IF NOT EXISTS idx_sub_events_week
   ON sub_events(season, week, event);
+
+-- League News (2026-10-23): blog-style posts. Auto posts are generated
+-- once per completed ticker window (headline + recap) and are unique on
+-- (season, week, window_key); admin posts (rule changes, announcements)
+-- have a NULL window_key. Members reply via news_comments. Deleting an
+-- auto post leaves a tombstone in news_deleted_windows so the generator
+-- does not resurrect it.
+CREATE TABLE IF NOT EXISTS news_posts (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  season     INTEGER NOT NULL,
+  week       INTEGER,
+  window_key TEXT,               -- 'YYYY-MM-DD:early|late|night' for auto posts
+  kind       TEXT NOT NULL DEFAULT 'auto',  -- auto | admin
+  headline   TEXT NOT NULL,
+  body       TEXT NOT NULL DEFAULT '',
+  author     TEXT NOT NULL DEFAULT 'Prime5 Wire',
+  created_at TEXT NOT NULL       -- ISO-8601 UTC (auto: the window close time)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_news_posts_window
+  ON news_posts(season, week, window_key) WHERE window_key IS NOT NULL;
+CREATE TABLE IF NOT EXISTS news_comments (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  post_id    INTEGER NOT NULL REFERENCES news_posts(id),
+  member_id  INTEGER NOT NULL REFERENCES members(id),
+  body       TEXT NOT NULL,
+  created_at TEXT NOT NULL       -- ISO-8601 UTC
+);
+CREATE INDEX IF NOT EXISTS idx_news_comments_post
+  ON news_comments(post_id, id);
+CREATE TABLE IF NOT EXISTS news_deleted_windows (
+  season     INTEGER NOT NULL,
+  week       INTEGER NOT NULL,
+  window_key TEXT NOT NULL,
+  PRIMARY KEY (season, week, window_key)
+);

@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Admin · League News{% endblock %}
+{% block brand_sub %}ADMIN CONSOLE{% endblock %}
+{% block ticker %}{% include "_ticker.html" %}{% endblock %}
+{% block content %}
+<h2>League News — Commissioner Posts</h2>
+<p><a href="/admin/{{ token }}">← Admin home</a> · <a href="/news">View League News →</a></p>
+<p class="note">Game recaps post themselves after each set of games. Use this form for rule changes and announcements — they appear on League News as the Commissioner.</p>
+
+<form method="post" action="/admin/{{ token }}/news" class="news-admin-form">
+  <label>Headline
+    <input type="text" name="headline" maxlength="200" required
+           placeholder="e.g. Rule change: two subs per week from Week 9">
+  </label>
+  <label>Post
+    <textarea name="body" rows="6" maxlength="8000"
+              placeholder="The details. Blank lines separate paragraphs."></textarea>
+  </label>
+  <button class="btn" type="submit">Publish post</button>
+</form>
+
+<h3>All posts — Season {{ season }}</h3>
+{% if not posts %}
+<p class="muted">No posts yet.</p>
+{% endif %}
+{% for p in posts %}
+<div class="news-admin-row">
+  <div class="news-admin-main">
+    <b>{{ p.headline }}</b>
+    <span class="muted">{{ p.author }} · {{ p.when }} · {{ p.replies }} replies{% if p.kind == 'auto' %} · auto recap{% endif %}</span>
+  </div>
+  <form method="post" action="/admin/{{ token }}/news/{{ p.id }}/delete"
+        onsubmit="return confirm('Delete this post and its replies?')">
+    <button class="btn btn-small" type="submit">Delete</button>
+  </form>
+</div>
+{% endfor %}
+{% endblock %}

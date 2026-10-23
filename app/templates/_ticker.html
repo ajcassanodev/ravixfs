@@ -11,7 +11,7 @@
         <span class="ticker-item"><b>{{ e.name }}</b><span class="pts">{{ "%.1f"|format(e.points) }}</span></span>
         {% endfor %}
         {% if ticker.headline %}
-        <span class="ticker-head"><span class="th-tag">HEADLINE</span>{{ ticker.headline }}</span>
+        <span class="ticker-head"><span class="th-tag">HEADLINE</span>{% if ticker.headline_id %}<a class="th-link" href="/news#post-{{ ticker.headline_id }}">{{ ticker.headline }}</a>{% else %}{{ ticker.headline }}{% endif %}</span>
         {% endif %}
         <span class="ticker-stamp">updated {{ ticker.updated }}</span>
       </div>

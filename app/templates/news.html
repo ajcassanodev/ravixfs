@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}League News{% endblock %}
+{% block ticker %}{% include "_ticker.html" %}{% endblock %}
+{% block content %}
+<h2>League News</h2>
+<p class="note">Recaps after every set of games, commissioner announcements and rule changes — reply to any post to join the conversation.</p>
+
+{% if not posts %}
+<div class="news-post">
+  <p class="muted" style="margin:0">Nothing yet. The first recap lands after the next set of games finishes.</p>
+</div>
+{% endif %}
+
+{% for p in posts %}
+<article class="news-post" id="post-{{ p.id }}">
+  <h3 class="news-head">{{ p.headline }}</h3>
+  <div class="news-meta">
+    <span class="news-author{% if p.kind == 'admin' %} commish{% endif %}">{{ p.author }}</span>
+    <span>{{ p.when }}</span>
+    <span>{{ p.comments|length }} repl{{ 'y' if p.comments|length == 1 else 'ies' }}</span>
+  </div>
+  {% for block in p.blocks %}
+  <div class="news-body">{% for line in block %}{{ line }}{% if not loop.last %}<br>{% endif %}{% endfor %}</div>
+  {% endfor %}
+
+  {% if p.comments %}
+  <div class="news-comments">
+    {% for c in p.comments %}
+    <div class="news-comment">
+      <div class="news-comment-meta"><b>{{ c.author }}</b><span>{{ c.when }}</span></div>
+      <p>{{ c.body }}</p>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if member %}
+  <form class="news-reply" method="post" action="/news/{{ p.id }}/reply">
+    <label class="news-reply-label" for="reply-{{ p.id }}">Reply as {{ member.name }}</label>
+    <textarea id="reply-{{ p.id }}" name="body" rows="2" maxlength="2000"
+              placeholder="Add your take…" required></textarea>
+    <button class="btn btn-small" type="submit">Post reply</button>
+  </form>
+  {% else %}
+  <p class="muted news-signin">Open your personal pick link to reply.</p>
+  {% endif %}
+</article>
+{% endfor %}
+{% endblock %}

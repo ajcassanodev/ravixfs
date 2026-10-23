@@ -363,20 +363,17 @@ def _headline_desc(stats) -> str:
     return " + ".join(parts[:2]) if parts else "big game"
 
 
-def _ticker_headline(con, season: int, week: int, entries, member_lines) -> str:
-    """HEADLINE segment text for the ticker, or "" when none is earned yet.
-
-    entries: the ticker's [{name, points}] sorted desc. member_lines:
-    {member name: member_week_points lines for `week`}.
+def _week_windows(con, season: int, week: int, entries, member_lines):
+    """The week's kickoff windows with per-window member gains and picked
+    players, oldest first. Each window: {key, label, close, gains, players,
+    entries} — entries being the week leaderboard AS OF that window's end
+    (cumulative window gains), so archived headlines stay true to their
+    moment even when generated later.
     """
     from datetime import timedelta
-    if not week or not entries:
-        return ""
     games = con.execute(
         "SELECT kickoff_utc FROM games WHERE season = ? AND week = ?",
         (season, week)).fetchall()
-    if not games:
-        return ""
     windows = {}
     for g in games:
         got = _window_key(g["kickoff_utc"])
@@ -386,23 +383,10 @@ def _ticker_headline(con, season: int, week: int, entries, member_lines) -> str:
         w = windows.setdefault(key, {"key": key, "last_ko": ko,
                                      "gains": {}, "players": {}})
         w["last_ko"] = max(w["last_ko"], ko)
-    if not windows:
-        return ""
     ordered = sorted(windows.values(), key=lambda w: w["last_ko"])
-    now = datetime.now(timezone.utc)
     for w in ordered:
+        w["label"] = _window_label(w["key"])
         w["close"] = w["last_ko"] + timedelta(hours=3, minutes=30)
-    closed = [w for w in ordered if now >= w["close"]]
-    if not closed:
-        return ""
-
-    totals = {e["name"]: e["points"] for e in entries}
-
-    def first(name):
-        # First name for prose; full name when two members share one.
-        fn = name.split()[0] if name else name
-        return name if sum(1 for n in totals if n.split()[0] == fn) > 1 else fn
-
     for mname, lines in member_lines.items():
         for pid, pname, _team, _src, pts, stats in lines:
             if not pts:
@@ -420,15 +404,30 @@ def _ticker_headline(con, season: int, week: int, entries, member_lines) -> str:
                 w["players"][pid] = {"name": pname, "pts": pts,
                                      "stats": stats, "owners": set()}
             w["players"][pid]["owners"].add(mname)
+    running = {e["name"]: 0.0 for e in entries}
+    for w in ordered:
+        for n, g in w["gains"].items():
+            running[n] = round(running.get(n, 0.0) + g, 2)
+        w["entries"] = sorted(
+            ({"name": n, "points": p} for n, p in running.items()),
+            key=lambda e: e["points"], reverse=True)
+    return ordered
 
-    active = None
-    for w in reversed(closed):
-        if any(v > 0 for v in w["gains"].values()):
-            active = w
-            break
-    if active is None:
-        return ""
-    is_final = active is ordered[-1]
+
+def _first_names(totals):
+    """First-name lookup for prose; full name when two members share one."""
+    def first(name):
+        fn = name.split()[0] if name else name
+        return name if sum(1 for n in totals if n.split()[0] == fn) > 1 else fn
+    return first
+
+
+def _headline_for_window(week: int, active, is_final: bool) -> str:
+    """The ticker headline text for one completed window, judged on the
+    leaderboard as of that window's end (active['entries'])."""
+    entries = active["entries"]
+    totals = {e["name"]: e["points"] for e in entries}
+    first = _first_names(totals)
     leader = entries[0]["name"]
     runner = entries[1]["name"] if len(entries) > 1 else None
     before = {n: round(totals[n] - active["gains"].get(n, 0.0), 2)
@@ -458,7 +457,7 @@ def _ticker_headline(con, season: int, week: int, entries, member_lines) -> str:
             return f"WEEK {week} FINAL — {lead_clause}; {tail}"
         return f"WEEK {week} FINAL — {lead_clause}"
 
-    label = _window_label(active["key"])
+    label = active["label"]
     player_clause = ""
     if top and top["pts"] >= 1.0:
         player_clause = f"{top['name']}'s {desc} ({top['pts']:.1f} pts)"
@@ -479,6 +478,123 @@ def _ticker_headline(con, season: int, week: int, entries, member_lines) -> str:
     if player_clause:
         return f"{label} — {player_clause}; {stmt}"
     return f"{label} — {stmt}"
+
+
+def _active_window(ordered):
+    """Latest closed window that actually has points in it, or None."""
+    now = datetime.now(timezone.utc)
+    active = None
+    for w in ordered:
+        if now >= w["close"] and any(v > 0 for v in w["gains"].values()):
+            active = w
+    return active
+
+
+def _ticker_headline(con, season: int, week: int, entries, member_lines) -> str:
+    """HEADLINE segment text for the ticker, or "" when none is earned yet.
+
+    entries: the ticker's [{name, points}] sorted desc. member_lines:
+    {member name: member_week_points lines for `week`}.
+    """
+    if not week or not entries:
+        return ""
+    ordered = _week_windows(con, season, week, entries, member_lines)
+    active = _active_window(ordered)
+    if active is None:
+        return ""
+    return _headline_for_window(week, active, active is ordered[-1])
+
+
+def _news_body_for_window(con, season: int, week: int, w,
+                          is_final: bool) -> str:
+    """Recap body for a window's League News post (plain text; blank-line
+    separated blocks, lines inside a block joined by single newlines).
+    The leaderboard shown is the week's as of this window's end."""
+    entries = w["entries"]
+    blocks = []
+    players = sorted(w["players"].values(), key=lambda d: d["pts"],
+                     reverse=True)
+    players = [p for p in players if p["pts"] > 0][:3]
+    if players:
+        lines = [f"Top performers — {w['label']}:"]
+        for p in players:
+            owners = ", ".join(sorted(p["owners"]))
+            lines.append(f"• {p['name']} — {p['pts']:.1f} pts · "
+                         f"{_headline_desc(p['stats'])} · picked by {owners}")
+        blocks.append("\n".join(lines))
+    gains = sorted(((n, g) for n, g in w["gains"].items() if g > 0),
+                   key=lambda kv: -kv[1])
+    if gains:
+        blocks.append("Window scoring:\n" + " · ".join(
+            f"{n} +{g:.1f}" for n, g in gains))
+    if entries:
+        blocks.append(f"Week {week} leaderboard:\n" + " · ".join(
+            f"{i}. {e['name']} {e['points']:.1f}"
+            for i, e in enumerate(entries, 1)))
+    if is_final and entries:
+        blocks.append(f"{entries[0]['name']} takes Week {week}.")
+        try:
+            real, test = scoring.standings(con, season, through_week=week)
+            table = real or test
+            if table:
+                blocks.append(
+                    f"Season standings after Week {week}:\n" + " · ".join(
+                        f"{i}. {n} {t:.1f}"
+                        for i, (_id, n, t) in enumerate(table, 1)))
+        except Exception:
+            pass
+    return "\n\n".join(blocks)
+
+
+def _window_key_str(key) -> str:
+    return f"{key[0].isoformat()}:{key[1]}"
+
+
+def _ensure_news_posts(con, season: int, week: int, entries, member_lines):
+    """Generate any missing League News auto posts for the week's closed
+    windows. Returns (posts_by_window_key, active_post_id). Idempotent:
+    posts are unique per (season, week, window); windows the admin
+    deleted stay deleted via news_deleted_windows tombstones.
+    """
+    if not week or not entries:
+        return {}, None
+    try:
+        existing = {r["window_key"]: r["id"] for r in con.execute(
+            "SELECT id, window_key FROM news_posts "
+            "WHERE season = ? AND week = ? AND window_key IS NOT NULL",
+            (season, week))}
+        deleted = {r["window_key"] for r in con.execute(
+            "SELECT window_key FROM news_deleted_windows "
+            "WHERE season = ? AND week = ?", (season, week))}
+    except Exception:
+        return {}, None  # news tables predate this deploy
+    ordered = _week_windows(con, season, week, entries, member_lines)
+    now = datetime.now(timezone.utc)
+    changed = False
+    for w in ordered:
+        wk = _window_key_str(w["key"])
+        if wk in existing or wk in deleted:
+            continue
+        if now < w["close"] or not any(v > 0 for v in w["gains"].values()):
+            continue
+        is_final = w is ordered[-1]
+        cur = con.execute(
+            "INSERT INTO news_posts (season, week, window_key, kind, "
+            "headline, body, author, created_at) VALUES (?, ?, ?, 'auto', "
+            "?, ?, 'Prime5 Wire', ?)",
+            (season, week, wk,
+             _headline_for_window(week, w, is_final),
+             _news_body_for_window(con, season, week, w, is_final),
+             w["close"].strftime("%Y-%m-%dT%H:%M:%SZ")))
+        existing[wk] = cur.lastrowid
+        changed = True
+    if changed:
+        con.commit()
+    active = _active_window(ordered)
+    active_id = None
+    if active is not None:
+        active_id = existing.get(_window_key_str(active["key"]))
+    return existing, active_id
 
 
 def _ticker_data(con, season: int, include_test: bool = False) -> dict:
@@ -543,8 +659,16 @@ def _ticker_data(con, season: int, include_test: bool = False) -> dict:
         headline = _ticker_headline(con, season, week, entries, member_lines)
     except Exception:
         headline = ""  # the ticker must never break over a headline
+    headline_id = None
+    if headline:
+        try:
+            _posts, headline_id = _ensure_news_posts(
+                con, season, week, entries, member_lines)
+        except Exception:
+            headline_id = None  # link is a bonus; the headline still shows
     return {"week": week, "entries": entries, "live": live,
-            "updated": stamp, "headline": headline}
+            "updated": stamp, "headline": headline,
+            "headline_id": headline_id}
 
 
 @app.get("/ticker.json")
@@ -1066,6 +1190,162 @@ def releases_page(request: Request):
     return templates.TemplateResponse(request, "releases.html", {
         "request": request, "releases": RELEASES,
     })
+
+
+def _et_news_stamp(iso_ts) -> str:
+    """'Thu Oct 22 · 11:50 PM ET' for a League News timestamp."""
+    try:
+        dt = datetime.fromisoformat(str(iso_ts).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        from zoneinfo import ZoneInfo
+        return dt.astimezone(ZoneInfo("America/New_York")).strftime(
+            "%a %b %-d · %-I:%M %p ET")
+    except Exception:
+        return ""
+
+
+def _news_post_view(con, r) -> dict:
+    comments = con.execute(
+        "SELECT c.body, c.created_at, m.name AS author FROM news_comments c "
+        "JOIN members m ON m.id = c.member_id WHERE c.post_id = ? ORDER BY c.id",
+        (r["id"],)).fetchall()
+    return {
+        "id": r["id"], "headline": r["headline"], "author": r["author"],
+        "kind": r["kind"], "when": _et_news_stamp(r["created_at"]),
+        "blocks": [b.split("\n") for b in r["body"].split("\n\n")]
+                  if r["body"] else [],
+        "comments": [{"author": c["author"], "body": c["body"],
+                      "when": _et_news_stamp(c["created_at"])}
+                     for c in comments],
+    }
+
+
+@app.get("/news", response_class=HTMLResponse)
+def news_page(request: Request):
+    """League News: auto recaps for each set of games (the ticker headline
+    links here), commissioner posts (rule changes, announcements), and
+    member replies on every post."""
+    con = _db.connect()
+    season = _db.current_season(con)
+    ticker = _ticker_data(
+        con, season,
+        include_test=_is_staging_host(request.headers.get("host", "")))
+    member = None
+    tok = _request_pick_token(request)
+    if tok:
+        member = con.execute(
+            "SELECT * FROM members WHERE pick_token = ?", (tok,)).fetchone()
+    posts = []
+    try:
+        rows = con.execute(
+            "SELECT * FROM news_posts WHERE season = ? "
+            "ORDER BY created_at DESC, id DESC", (season,)).fetchall()
+        posts = [_news_post_view(con, r) for r in rows]
+    except Exception:
+        posts = []  # news tables predate this deploy
+    con.close()
+    return templates.TemplateResponse(request, "news.html", {
+        "request": request, "ticker": ticker, "posts": posts,
+        "member": member, "season": season})
+
+
+@app.post("/news/{post_id}/reply")
+def news_reply(request: Request, post_id: int, body: str = Form("")):
+    tok = _request_pick_token(request)
+    if not tok:
+        raise HTTPException(403, "open your pick link to reply")
+    body = (body or "").strip()[:2000]
+    if not body:
+        return RedirectResponse(f"/news#post-{post_id}", status_code=303)
+    con = _db.connect()
+    member = con.execute(
+        "SELECT * FROM members WHERE pick_token = ?", (tok,)).fetchone()
+    post = con.execute(
+        "SELECT id FROM news_posts WHERE id = ?", (post_id,)).fetchone()
+    if member is None or post is None:
+        con.close()
+        raise HTTPException(404, "not found")
+    con.execute(
+        "INSERT INTO news_comments (post_id, member_id, body, created_at) "
+        "VALUES (?, ?, ?, ?)",
+        (post_id, member["id"], body,
+         datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")))
+    con.commit()
+    con.close()
+    return RedirectResponse(f"/news#post-{post_id}", status_code=303)
+
+
+@app.get("/admin/{token}/news", response_class=HTMLResponse)
+def admin_news(request: Request, token: str):
+    if not _admin_ok(token):
+        raise HTTPException(404, "not found")
+    con = _db.connect()
+    season = _db.current_season(con)
+    ticker = _ticker_data(
+        con, season,
+        include_test=_is_staging_host(request.headers.get("host", "")))
+    posts = []
+    try:
+        for r in con.execute(
+                "SELECT p.*, (SELECT COUNT(*) FROM news_comments c "
+                "WHERE c.post_id = p.id) AS replies FROM news_posts "
+                "WHERE season = ? ORDER BY created_at DESC, id DESC",
+                (season,)):
+            posts.append({"id": r["id"], "headline": r["headline"],
+                          "kind": r["kind"], "author": r["author"],
+                          "replies": r["replies"],
+                          "when": _et_news_stamp(r["created_at"])})
+    except Exception:
+        posts = []  # news tables predate this deploy
+    con.close()
+    return templates.TemplateResponse(request, "admin_news.html", {
+        "request": request, "token": token, "season": season,
+        "posts": posts, "ticker": ticker})
+
+
+@app.post("/admin/{token}/news")
+def admin_news_create(token: str, headline: str = Form(""),
+                      body: str = Form("")):
+    if not _admin_ok(token):
+        raise HTTPException(404, "not found")
+    headline = (headline or "").strip()[:200]
+    body = (body or "").strip()[:8000]
+    if not headline:
+        raise HTTPException(400, "headline required")
+    con = _db.connect()
+    season = _db.current_season(con)
+    week = _db.current_pick_week(con, season)
+    con.execute(
+        "INSERT INTO news_posts (season, week, window_key, kind, headline, "
+        "body, author, created_at) VALUES (?, ?, NULL, 'admin', ?, ?, "
+        "'Commissioner', ?)",
+        (season, week, headline, body,
+         datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")))
+    con.commit()
+    con.close()
+    return RedirectResponse(f"/admin/{token}/news", status_code=303)
+
+
+@app.post("/admin/{token}/news/{post_id}/delete")
+def admin_news_delete(token: str, post_id: int):
+    if not _admin_ok(token):
+        raise HTTPException(404, "not found")
+    con = _db.connect()
+    row = con.execute(
+        "SELECT * FROM news_posts WHERE id = ?", (post_id,)).fetchone()
+    if row is not None:
+        if row["window_key"]:
+            # Tombstone so the generator doesn't resurrect an auto post.
+            con.execute(
+                "INSERT OR IGNORE INTO news_deleted_windows "
+                "(season, week, window_key) VALUES (?, ?, ?)",
+                (row["season"], row["week"], row["window_key"]))
+        con.execute("DELETE FROM news_comments WHERE post_id = ?", (post_id,))
+        con.execute("DELETE FROM news_posts WHERE id = ?", (post_id,))
+        con.commit()
+    con.close()
+    return RedirectResponse(f"/admin/{token}/news", status_code=303)
 
 
 @app.get("/submit/{token}", response_class=HTMLResponse)
