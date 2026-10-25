@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-10-25",
+    "version": "2026-10-25.4",
+    "title": "Substitutions now headline the ticker",
+    "notes": [
+      "Every completed substitution scrolls through the ticker with a SUB tag — who subbed, who went out, who came in, and the game clock — right alongside the window headline and the rest of the news",
+      "The ticker refresh picks new subs up automatically, so they appear within a few minutes of the swap"
+    ]
+  },
+  {
+    "date": "2026-10-25",
     "version": "2026-10-25.3",
     "title": "Scoring popups now respect substitutions too",
     "notes": [

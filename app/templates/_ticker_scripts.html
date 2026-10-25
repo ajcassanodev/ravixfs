@@ -26,6 +26,9 @@
           : '<span class="th-text"></span>') +
         '</span>';
     }
+    (d.sub_news || []).forEach(function () {
+      h += '<span class="ticker-sub"><span class="th-tag sub">SUB</span><span class="sub-text"></span></span>';
+    });
     h += '<span class="ticker-stamp">updated ' + d.updated + '</span></div>';
     return h;
   }
@@ -67,6 +70,10 @@
     });
     var th = half.querySelector('.th-text');
     if (th) th.textContent = d.headline || '';
+    var subs = half.querySelectorAll('.sub-text');
+    (d.sub_news || []).forEach(function (s, i) {
+      if (subs[i]) subs[i].textContent = s.text;
+    });
     var clone = half.cloneNode(true);
     clone.setAttribute('aria-hidden', 'true');
     inner.innerHTML = '';

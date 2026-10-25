@@ -666,9 +666,31 @@ def _ticker_data(con, season: int, include_test: bool = False) -> dict:
                 con, season, week, entries, member_lines)
         except Exception:
             headline_id = None  # link is a bonus; the headline still shows
+    # Recent substitutions in the same week, newest first: every completed
+    # sub scrolls in the ticker with a SUB tag, alongside the headline.
+    # Same test-member rule as the entries: staging shows test members so
+    # the feature is visible during the test pass, production hides them.
+    sub_news = []
+    try:
+        test_filter = "" if include_test else "AND COALESCE(m.is_test, 0) = 0 "
+        for s in con.execute(
+                "SELECT s.game_label, m.name AS member_name, "
+                "po.name AS out_name, pi.name AS in_name "
+                "FROM weekly_subs s JOIN members m ON m.id = s.member_id "
+                "JOIN players po ON po.player_id = s.out_player_id "
+                "JOIN players pi ON pi.player_id = s.in_player_id "
+                "WHERE s.season = ? AND s.week = ? " + test_filter +
+                "ORDER BY s.subbed_at DESC LIMIT 5",
+                (season, week)):
+            text = f"{s['member_name']} subs {s['out_name']} → {s['in_name']}"
+            if s["game_label"]:
+                text += f" ({s['game_label']})"
+            sub_news.append({"text": text})
+    except Exception:
+        sub_news = []  # the ticker must never break over sub news
     return {"week": week, "entries": entries, "live": live,
             "updated": stamp, "headline": headline,
-            "headline_id": headline_id}
+            "headline_id": headline_id, "sub_news": sub_news}
 
 
 @app.get("/ticker.json")

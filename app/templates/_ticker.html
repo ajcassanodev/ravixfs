@@ -13,6 +13,9 @@
         {% if ticker.headline %}
         <span class="ticker-head"><span class="th-tag">HEADLINE</span>{% if ticker.headline_id %}<a class="th-link" href="/news#post-{{ ticker.headline_id }}">{{ ticker.headline }}</a>{% else %}{{ ticker.headline }}{% endif %}</span>
         {% endif %}
+        {% for s in ticker.sub_news %}
+        <span class="ticker-sub"><span class="th-tag sub">SUB</span>{{ s.text }}</span>
+        {% endfor %}
         <span class="ticker-stamp">updated {{ ticker.updated }}</span>
       </div>
       {% endfor %}

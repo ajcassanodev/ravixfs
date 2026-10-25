@@ -116,6 +116,9 @@ nav a:hover{color:var(--text);background:rgba(255,255,255,.05)}
   padding:2px 0 2px 16px;border-left:1px solid var(--line);font-size:.95rem;color:var(--text)}
 .th-tag{background:var(--gold);color:#141414;font-weight:800;font-size:.66rem;
   letter-spacing:.09em;padding:2px 7px;border-radius:5px}
+.th-tag.sub{background:var(--cyan);color:#0a0c11}
+.ticker-sub{display:inline-flex;align-items:center;gap:9px;margin:-2px 20px -2px 0;
+  padding:2px 0 2px 16px;border-left:1px solid var(--line);font-size:.95rem;color:var(--text)}
 .th-link{color:inherit;text-decoration:none;border-bottom:1px dotted var(--gold)}
 .th-link:hover{color:var(--gold)}
 
