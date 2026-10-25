@@ -183,6 +183,8 @@ def sub_outcomes(con, member_id: int, season: int, week: int):
         earned = ist["points"] if ist else 0.0
         out.append({
             "subbed_at": s["subbed_at"], "game_label": s["game_label"],
+            "out_player_id": s["out_player_id"],
+            "in_player_id": s["in_player_id"],
             "out_name": ost["name"] if ost else s["out_player_id"],
             "in_name": ist["name"] if ist else s["in_player_id"],
             "banked": banked, "earned": earned,

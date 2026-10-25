@@ -505,8 +505,30 @@ def _ticker_headline(con, season: int, week: int, entries, member_lines) -> str:
     return _headline_for_window(week, active, active is ordered[-1])
 
 
+def _subs_for_window(con, season: int, week: int, wkey, member_names):
+    """(member name, sub outcome) for subs whose out-player game falls in
+    this window, oldest first. A sub belongs to the window its outgoing
+    player's game kicked off in (subs swap within a window). Never breaks
+    the report: any failure yields no sub block."""
+    lines = []
+    try:
+        for m in con.execute("SELECT id, name FROM members"):
+            if member_names is not None and m["name"] not in member_names:
+                continue
+            for o in scoring.sub_outcomes(con, m["id"], season, week):
+                ko = _db.player_kickoff(con, o["out_player_id"],
+                                        season, week)
+                got = _window_key(ko) if ko else None
+                if got and got[0] == wkey:
+                    lines.append((m["name"], o))
+    except Exception:
+        return []
+    lines.sort(key=lambda t: t[1]["subbed_at"])
+    return lines
+
+
 def _news_body_for_window(con, season: int, week: int, w,
-                          is_final: bool) -> str:
+                          is_final: bool, member_lines=None) -> str:
     """Recap body for a window's League News post (plain text; blank-line
     separated blocks, lines inside a block joined by single newlines).
     The leaderboard shown is the week's as of this window's end."""
@@ -527,6 +549,22 @@ def _news_body_for_window(con, season: int, week: int, w,
     if gains:
         blocks.append("Window scoring:\n" + " · ".join(
             f"{n} +{g:.1f}" for n, g in gains))
+    subs = _subs_for_window(con, season, week, w["key"],
+                            set(member_lines) if member_lines else None)
+    if subs:
+        lines = ["Substitutions — did the swap pay off?:"]
+        for mname, o in subs:
+            out_after = round(o["earned"] - o["net"], 2)
+            verdict = ("Paid off" if o["net"] > 0 else
+                       "Wash" if o["net"] == 0 else "Backfired")
+            clock = f" ({o['game_label']})" if o["game_label"] else ""
+            lines.append(
+                f"• {mname} — {o['out_name']} out "
+                f"({o['banked']:.1f} banked) → {o['in_name']} in{clock}: "
+                f"{o['in_name']} +{o['earned']:.1f} since entry · "
+                f"{o['out_name']} +{out_after:.1f} after → "
+                f"net {o['net']:+.1f} · {verdict}")
+        blocks.append("\n".join(lines))
     if entries:
         blocks.append(f"Week {week} leaderboard:\n" + " · ".join(
             f"{i}. {e['name']} {e['points']:.1f}"
@@ -584,7 +622,8 @@ def _ensure_news_posts(con, season: int, week: int, entries, member_lines):
             "?, ?, 'Prime5 Wire', ?)",
             (season, week, wk,
              _headline_for_window(week, w, is_final),
-             _news_body_for_window(con, season, week, w, is_final),
+             _news_body_for_window(con, season, week, w, is_final,
+                                   member_lines),
              w["close"].strftime("%Y-%m-%dT%H:%M:%SZ")))
         existing[wk] = cur.lastrowid
         changed = True
@@ -670,22 +709,43 @@ def _ticker_data(con, season: int, include_test: bool = False) -> dict:
     # sub scrolls in the ticker with a SUB tag, alongside the headline.
     # Same test-member rule as the entries: staging shows test members so
     # the feature is visible during the test pass, production hides them.
+    # Once a window's report is out (published, or deleted by the admin),
+    # that window's subs leave the ticker — the report is the record now.
     sub_news = []
     try:
+        reported = set()
+        try:
+            for r in con.execute(
+                    "SELECT window_key FROM news_posts "
+                    "WHERE season = ? AND week = ? AND window_key IS NOT NULL",
+                    (season, week)):
+                reported.add(r["window_key"])
+            for r in con.execute(
+                    "SELECT window_key FROM news_deleted_windows "
+                    "WHERE season = ? AND week = ?", (season, week)):
+                reported.add(r["window_key"])
+        except Exception:
+            reported = set()
         test_filter = "" if include_test else "AND COALESCE(m.is_test, 0) = 0 "
         for s in con.execute(
-                "SELECT s.game_label, m.name AS member_name, "
+                "SELECT s.out_player_id, s.game_label, m.name AS member_name, "
                 "po.name AS out_name, pi.name AS in_name "
                 "FROM weekly_subs s JOIN members m ON m.id = s.member_id "
                 "JOIN players po ON po.player_id = s.out_player_id "
                 "JOIN players pi ON pi.player_id = s.in_player_id "
                 "WHERE s.season = ? AND s.week = ? " + test_filter +
-                "ORDER BY s.subbed_at DESC LIMIT 5",
+                "ORDER BY s.subbed_at DESC LIMIT 20",
                 (season, week)):
+            ko = _db.player_kickoff(con, s["out_player_id"], season, week)
+            got = _window_key(ko) if ko else None
+            if got and _window_key_str(got[0]) in reported:
+                continue
             text = f"{s['member_name']} subs {s['out_name']} → {s['in_name']}"
             if s["game_label"]:
                 text += f" ({s['game_label']})"
             sub_news.append({"text": text})
+            if len(sub_news) >= 5:
+                break
     except Exception:
         sub_news = []  # the ticker must never break over sub news
     return {"week": week, "entries": entries, "live": live,

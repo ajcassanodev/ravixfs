@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-10-25",
+    "version": "2026-10-25.5",
+    "title": "Window reports now grade your substitutions",
+    "notes": [
+      "Each window recap gains a Substitutions section: every swap in that window with what the replacement scored since entering, what the benched player scored after, and a Paid off / Wash / Backfired verdict on the net",
+      "Once a window's report is out, that window's SUB notifications leave the ticker — the report is the record now, and later windows' subs keep scrolling until their report goes out"
+    ]
+  },
+  {
+    "date": "2026-10-25",
     "version": "2026-10-25.4",
     "title": "Substitutions now headline the ticker",
     "notes": [
