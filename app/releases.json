@@ -1,5 +1,14 @@
 [
   {
+    "date": "2026-10-25",
+    "version": "2026-10-25.1",
+    "title": "MY PICKS rows back to a single line",
+    "notes": [
+      "The SUB button now sits on the pick row itself, next to the points, instead of on a second line underneath — each player takes exactly the same height as when you first make your picks",
+      "Subbed-out players show a compact OUT tag; the swap detail (who came in, when, points banked) stays in the history line under the header"
+    ]
+  },
+  {
     "date": "2026-10-23",
     "version": "2026-10-23.5",
     "title": "League News: recaps you can reply to",

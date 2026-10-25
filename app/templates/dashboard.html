@@ -54,13 +54,8 @@
       <div class="pick-main">
         <span class="dash-pname">{{ p.name }}</span>
         <span class="dash-team">{{ p.team }}</span>{% if p.chip %}<span class="pstatus ps-{{ p.chip.kind }}">{{ p.chip.label }}</span>{% endif %}
-        <span class="dash-pright">{% if not p.subbed_out %}<span class="gstatus g-{{ p.status }}">{{ p.label }}</span>{% endif %}<span class="dash-ppts" data-v="{{ p.points }}">{{ "%.1f"|format(p.points) }}</span></span>
+        <span class="dash-pright">{% if p.subbed_out %}<span class="subtag">OUT</span>{% else %}<span class="gstatus g-{{ p.status }}">{{ p.label }}</span>{% endif %}<span class="dash-ppts" data-v="{{ p.points }}">{{ "%.1f"|format(p.points) }}</span>{% if p.can_sub %}<a class="subbtn" href="/submit/{{ token }}/sub?out={{ p.player_id }}">SUB</a>{% endif %}</span>
       </div>
-      {% if p.subbed_out %}
-      <div class="pick-sub"><span class="subtag">SUBBED OUT{% if p.out_label %} {{ p.out_label }}{% endif %} · BANKED {{ "%.1f"|format(p.points) }}</span></div>
-      {% elif p.in_label or p.can_sub %}
-      <div class="pick-sub">{% if p.in_label %}<span class="subtag in">IN SINCE {{ p.in_label }}</span>{% endif %}{% if p.can_sub %}<a class="subbtn" href="/submit/{{ token }}/sub?out={{ p.player_id }}">SUB</a>{% endif %}</div>
-      {% endif %}
     </div>
     {% else %}
     <p class="muted">No picks yet this week.</p>
