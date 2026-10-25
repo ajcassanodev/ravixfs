@@ -705,21 +705,36 @@ def _et_event_label(iso_ts):
 def _scoring_summary(con, mid, season, week, limit=12):
     """The member's scoring plays for the week, newest first.
 
-    Built from scoring_events (the same feed as the scoring popups) for
-    the member's weekly picks, so the plays stay reviewable after the
-    popup fades. Big plays stay individual; tackle events are grouped
-    per player so the list isn't drowned in +0.1 rows.
+    Built from scoring_events (the same feed as the scoring popups),
+    but only the plays that actually counted: a play is kept only if it
+    falls inside the player's active stint — past his entry snapshot
+    and no further than his sub-out snapshot. So a subbed-out player's
+    later plays don't show (they scored nothing for the member), and a
+    replacement's pre-entry plays don't either. Cumulative totals are
+    the bounds, so poller timing can't misplace a play. Big plays stay
+    individual; tackle events are grouped per player so the list isn't
+    drowned in +0.1 rows.
     """
+    stints = scoring.member_week_stints(con, mid, season, week)
+    by_pid = {s["player_id"]: s for s in stints}
+    if not by_pid:
+        return []
+    ph = ",".join("?" * len(by_pid))
     rows = con.execute(
         "SELECT e.player_id, e.stat_key, e.old_total, e.new_total, "
         "e.points_delta, e.created_at, p.name, p.team "
         "FROM scoring_events e JOIN players p ON p.player_id = e.player_id "
-        "JOIN weekly_picks wp ON wp.player_id = e.player_id "
-        "AND wp.member_id = ? AND wp.season = e.season AND wp.week = e.week "
-        "WHERE e.season = ? AND e.week = ? ORDER BY e.created_at DESC",
-        (mid, season, week)).fetchall()
+        f"WHERE e.season = ? AND e.week = ? AND e.player_id IN ({ph}) "
+        "ORDER BY e.created_at DESC",
+        (season, week, *by_pid.keys())).fetchall()
     out, tackles = [], {}
     for r in rows:
+        st = by_pid[r["player_id"]]
+        start = st["start"].get(r["stat_key"], 0) or 0
+        end = st["end"].get(r["stat_key"], 0) if st["end"] is not None else None
+        if not (r["new_total"] > start
+                and (end is None or r["new_total"] <= end)):
+            continue
         delta = round(r["new_total"] - r["old_total"], 2)
         if r["stat_key"] == "tackles":
             g = tackles.setdefault(r["player_id"], {

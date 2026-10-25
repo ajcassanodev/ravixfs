@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-10-25",
+    "version": "2026-10-25.2",
+    "title": "Scoring summary shows only the points you actually got",
+    "notes": [
+      "The scoring summary under MY PICKS now counts each player's time in your lineup: a subbed-out player's later plays no longer show up, and a replacement's plays from before he entered don't either",
+      "What you see in the summary now adds up to the points on your dashboard"
+    ]
+  },
+  {
+    "date": "2026-10-25",
     "version": "2026-10-25.1",
     "title": "MY PICKS rows back to a single line",
     "notes": [
