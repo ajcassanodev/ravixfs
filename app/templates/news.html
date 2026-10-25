@@ -17,6 +17,7 @@
   <div class="news-meta">
     <span class="news-author{% if p.kind == 'admin' %} commish{% endif %}">{{ p.author }}</span>
     <span>{{ p.when }}</span>
+    {% if p.updated %}<span class="news-updated">Updated</span>{% endif %}
     <span>{{ p.comments|length }} repl{{ 'y' if p.comments|length == 1 else 'ies' }}</span>
   </div>
   {% for block in p.blocks %}

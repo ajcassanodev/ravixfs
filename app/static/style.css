@@ -117,7 +117,10 @@ nav a:hover{color:var(--text);background:rgba(255,255,255,.05)}
 .th-tag{background:var(--gold);color:#141414;font-weight:800;font-size:.66rem;
   letter-spacing:.09em;padding:2px 7px;border-radius:5px}
 .th-tag.sub{background:var(--cyan);color:#0a0c11}
+.th-tag.corr{background:#e5484d;color:#fff}
 .ticker-sub{display:inline-flex;align-items:center;gap:9px;margin:-2px 20px -2px 0;
+  padding:2px 0 2px 16px;border-left:1px solid var(--line);font-size:.95rem;color:var(--text)}
+.ticker-corr{display:inline-flex;align-items:center;gap:9px;margin:-2px 20px -2px 0;
   padding:2px 0 2px 16px;border-left:1px solid var(--line);font-size:.95rem;color:var(--text)}
 .th-link{color:inherit;text-decoration:none;border-bottom:1px dotted var(--gold)}
 .th-link:hover{color:var(--gold)}
@@ -130,6 +133,8 @@ nav a:hover{color:var(--text);background:rgba(255,255,255,.05)}
 .news-meta{display:flex;gap:14px;flex-wrap:wrap;color:var(--muted);font-size:.82rem;margin-bottom:10px}
 .news-author{color:var(--cyan);font-weight:700}
 .news-author.commish{color:var(--gold)}
+.news-updated{background:#e5484d;color:#fff;font-weight:800;font-size:.66rem;
+  letter-spacing:.09em;padding:2px 7px;border-radius:5px}
 .news-body{margin:0 0 10px;line-height:1.5}
 .news-body:last-of-type{margin-bottom:0}
 .news-comments{margin-top:14px;border-top:1px solid var(--line);padding-top:12px;

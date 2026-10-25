@@ -251,3 +251,21 @@ CREATE TABLE IF NOT EXISTS news_deleted_windows (
   window_key TEXT NOT NULL,
   PRIMARY KEY (season, week, window_key)
 );
+
+-- Stat corrections: the live poller records a row whenever a big-play
+-- total DROPS (overturned fumble, corrected sack, ...). Tackle-only drops
+-- are not recorded: they move totals by 0.1 and need no announcement.
+-- The app renders these as Correction blocks on the already-published
+-- window report (read-time, so the original post is never rewritten).
+CREATE TABLE IF NOT EXISTS stat_corrections (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  player_id    TEXT NOT NULL,
+  season       INTEGER NOT NULL,
+  week         INTEGER NOT NULL,
+  stat_key     TEXT NOT NULL,
+  old_total    REAL NOT NULL,
+  new_total    REAL NOT NULL,
+  points_delta REAL NOT NULL,
+  game_id      TEXT NOT NULL DEFAULT '',
+  detected_at  TEXT NOT NULL
+);

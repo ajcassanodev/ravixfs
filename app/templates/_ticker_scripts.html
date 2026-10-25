@@ -29,6 +29,9 @@
     (d.sub_news || []).forEach(function () {
       h += '<span class="ticker-sub"><span class="th-tag sub">SUB</span><span class="sub-text"></span></span>';
     });
+    (d.corrections || []).forEach(function () {
+      h += '<span class="ticker-corr"><span class="th-tag corr">CORRECTION</span><a class="th-link"><span class="corr-text"></span></a></span>';
+    });
     h += '<span class="ticker-stamp">updated ' + d.updated + '</span></div>';
     return h;
   }
@@ -73,6 +76,14 @@
     var subs = half.querySelectorAll('.sub-text');
     (d.sub_news || []).forEach(function (s, i) {
       if (subs[i]) subs[i].textContent = s.text;
+    });
+    var corrs = half.querySelectorAll('.corr-text');
+    (d.corrections || []).forEach(function (c, i) {
+      if (corrs[i]) {
+        corrs[i].textContent = c.text;
+        var a = corrs[i].parentNode;
+        if (a && c.post_id) a.setAttribute('href', '/news#post-' + c.post_id);
+      }
     });
     var clone = half.cloneNode(true);
     clone.setAttribute('aria-hidden', 'true');

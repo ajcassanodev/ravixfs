@@ -84,6 +84,14 @@ def _ensure_tables(con) -> None:
         "game_id TEXT NOT NULL DEFAULT '', fetched_at TEXT NOT NULL DEFAULT '', "
         "PRIMARY KEY (player_id, season, week))"
     )
+    con.execute(
+        "CREATE TABLE IF NOT EXISTS stat_corrections ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "player_id TEXT NOT NULL, season INTEGER NOT NULL, week INTEGER NOT NULL, "
+        "stat_key TEXT NOT NULL, old_total REAL NOT NULL, new_total REAL NOT NULL, "
+        "points_delta REAL NOT NULL, game_id TEXT NOT NULL DEFAULT '', "
+        "detected_at TEXT NOT NULL)"
+    )
 
 
 def _calls_used(con, month: str) -> int:
@@ -130,6 +138,45 @@ def _player_index(con):
         if nm:
             idx.setdefault(nm, []).append((r["player_id"], r["team"]))
     return idx
+
+
+# Big-play stats whose drops get announced as corrections; a tackle-only
+# drop moves a total by 0.1 and is not worth a correction notice.
+CORRECTION_STATS = ("sacks", "interceptions", "forced_fumbles",
+                    "fumble_recoveries", "safeties", "def_tds")
+
+
+def _record_stat_changes(con, pid, season, week, stats, old, cfg,
+                         game_id, fetched_at) -> None:
+    """Scoring events for stat increases (existing behavior) plus a
+    stat_corrections row for a big-play total that DROPPED — an overturn
+    or stat-crew correction. Drops used to be silent: the live_stats
+    upsert overwrote the total with no record, so a published window
+    report kept the old numbers forever. Does not commit."""
+    for c in STAT_COLS:
+        new_v = stats.get(c, 0)
+        old_v = (old[c] if old else 0) or 0
+        if new_v > old_v + 1e-9:
+            pts = round((new_v - old_v) * cfg.get(c, 0), 2)
+            if pts > 0:
+                con.execute(
+                    "INSERT INTO scoring_events (player_id, season, week, stat_key, "
+                    "old_total, new_total, points_delta, game_id, created_at) "
+                    "VALUES (?,?,?,?,?,?,?,?,?) "
+                    "ON CONFLICT (player_id, season, week, stat_key, new_total) "
+                    "DO NOTHING",
+                    (pid, season, week, c, old_v, new_v, pts,
+                     game_id, fetched_at),
+                )
+        elif new_v < old_v - 1e-9 and c in CORRECTION_STATS:
+            pts = round((new_v - old_v) * cfg.get(c, 0), 2)
+            con.execute(
+                "INSERT INTO stat_corrections (player_id, season, week, stat_key, "
+                "old_total, new_total, points_delta, game_id, detected_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?)",
+                (pid, season, week, c, old_v, new_v, pts,
+                 game_id, fetched_at),
+            )
 
 
 def _poll_games(con, games, key: str, now: datetime):
@@ -185,21 +232,8 @@ def _poll_games(con, games, key: str, now: datetime):
                 "SELECT * FROM live_stats WHERE player_id = ? AND season = ? AND week = ?",
                 (pid, season, week),
             ).fetchone()
-            for c in STAT_COLS:
-                new_v = stats.get(c, 0)
-                old_v = (old[c] if old else 0) or 0
-                if new_v > old_v + 1e-9:
-                    pts = round((new_v - old_v) * cfg.get(c, 0), 2)
-                    if pts > 0:
-                        con.execute(
-                            "INSERT INTO scoring_events (player_id, season, week, stat_key, "
-                            "old_total, new_total, points_delta, game_id, created_at) "
-                            "VALUES (?,?,?,?,?,?,?,?,?) "
-                            "ON CONFLICT (player_id, season, week, stat_key, new_total) "
-                            "DO NOTHING",
-                            (pid, season, week, c, old_v, new_v, pts,
-                             game_id, fetched_at),
-                        )
+            _record_stat_changes(con, pid, season, week, stats, old, cfg,
+                                 game_id, fetched_at)
             cols = ", ".join(STAT_COLS)
             vals = ", ".join(str(stats.get(c, 0)) for c in STAT_COLS)
             sets = ", ".join(f"{c}=excluded.{c}" for c in STAT_COLS)

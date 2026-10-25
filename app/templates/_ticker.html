@@ -16,6 +16,9 @@
         {% for s in ticker.sub_news %}
         <span class="ticker-sub"><span class="th-tag sub">SUB</span>{{ s.text }}</span>
         {% endfor %}
+        {% for c in ticker.corrections %}
+        <span class="ticker-corr"><span class="th-tag corr">CORRECTION</span><a class="th-link" href="/news#post-{{ c.post_id }}">{{ c.text }}</a></span>
+        {% endfor %}
         <span class="ticker-stamp">updated {{ ticker.updated }}</span>
       </div>
       {% endfor %}

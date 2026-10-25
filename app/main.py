@@ -595,7 +595,7 @@ def _ensure_news_posts(con, season: int, week: int, entries, member_lines):
     deleted stay deleted via news_deleted_windows tombstones.
     """
     if not week or not entries:
-        return {}, None
+        return {}, None, []
     try:
         existing = {r["window_key"]: r["id"] for r in con.execute(
             "SELECT id, window_key FROM news_posts "
@@ -605,7 +605,7 @@ def _ensure_news_posts(con, season: int, week: int, entries, member_lines):
             "SELECT window_key FROM news_deleted_windows "
             "WHERE season = ? AND week = ?", (season, week))}
     except Exception:
-        return {}, None  # news tables predate this deploy
+        return {}, None, []  # news tables predate this deploy
     ordered = _week_windows(con, season, week, entries, member_lines)
     now = datetime.now(timezone.utc)
     changed = False
@@ -633,7 +633,7 @@ def _ensure_news_posts(con, season: int, week: int, entries, member_lines):
     active_id = None
     if active is not None:
         active_id = existing.get(_window_key_str(active["key"]))
-    return existing, active_id
+    return existing, active_id, ordered
 
 
 def _ticker_data(con, season: int, include_test: bool = False) -> dict:
@@ -699,9 +699,10 @@ def _ticker_data(con, season: int, include_test: bool = False) -> dict:
     except Exception:
         headline = ""  # the ticker must never break over a headline
     headline_id = None
+    posted, ordered = {}, []
     if headline:
         try:
-            _posts, headline_id = _ensure_news_posts(
+            posted, headline_id, ordered = _ensure_news_posts(
                 con, season, week, entries, member_lines)
         except Exception:
             headline_id = None  # link is a bonus; the headline still shows
@@ -748,9 +749,41 @@ def _ticker_data(con, season: int, include_test: bool = False) -> dict:
                 break
     except Exception:
         sub_news = []  # the ticker must never break over sub news
+    # Correction notices: stat drops in the most recently reported window
+    # scroll in the ticker (linking to the amended post) until the next
+    # window's report goes out. Older corrections stay in their posts.
+    corrections = []
+    try:
+        latest_key, latest_id = None, None
+        for w in ordered:
+            wk = _window_key_str(w["key"])
+            if wk in posted:
+                latest_key, latest_id = wk, posted[wk]
+        if latest_key:
+            for r in con.execute(
+                    "SELECT c.*, p.name AS pname FROM stat_corrections c "
+                    "JOIN players p ON p.player_id = c.player_id "
+                    "WHERE c.season = ? AND c.week = ? "
+                    "ORDER BY c.detected_at DESC LIMIT 10",
+                    (season, week)):
+                ko = _db.player_kickoff(con, r["player_id"], season, week)
+                got = _window_key(ko) if ko else None
+                if not got or _window_key_str(got[0]) != latest_key:
+                    continue
+                label = _CORRECTION_STAT_LABELS.get(
+                    r["stat_key"], r["stat_key"])
+                corrections.append({
+                    "text": f"{r['pname']}'s {label} corrected "
+                            f"({r['old_total']:g} → {r['new_total']:g})",
+                    "post_id": latest_id})
+                if len(corrections) >= 3:
+                    break
+    except Exception:
+        corrections = []  # the ticker must never break over corrections
     return {"week": week, "entries": entries, "live": live,
             "updated": stamp, "headline": headline,
-            "headline_id": headline_id, "sub_news": sub_news}
+            "headline_id": headline_id, "sub_news": sub_news,
+            "corrections": corrections}
 
 
 @app.get("/ticker.json")
@@ -1308,16 +1341,97 @@ def _et_news_stamp(iso_ts) -> str:
         return ""
 
 
+_CORRECTION_STAT_LABELS = {
+    "sacks": "sacks", "interceptions": "interceptions",
+    "forced_fumbles": "forced fumbles",
+    "fumble_recoveries": "fumble recoveries",
+    "safeties": "safeties", "def_tds": "defensive TDs",
+}
+
+
+def _corrections_for_window(con, season: int, week: int, wkey_str: str):
+    """Correction blocks for one published window, oldest first.
+
+    Read-time only: the stored post is never rewritten. Each block groups
+    one player's corrections in the window — the stat changes plus the
+    player's total old → new (current total minus the summed deltas;
+    exact when nothing else changed for that player since, which is the
+    normal overturn case). Owners are the members with a stint for that
+    player this week. Never breaks the post: any failure yields no blocks.
+    """
+    try:
+        rows = con.execute(
+            "SELECT c.*, p.name AS pname FROM stat_corrections c "
+            "JOIN players p ON p.player_id = c.player_id "
+            "WHERE c.season = ? AND c.week = ? ORDER BY c.detected_at",
+            (season, week)).fetchall()
+    except Exception:
+        return []
+    blocks = []
+    try:
+        by_player = {}
+        for r in rows:
+            ko = _db.player_kickoff(con, r["player_id"], season, week)
+            got = _window_key(ko) if ko else None
+            if not got or _window_key_str(got[0]) != wkey_str:
+                continue
+            by_player.setdefault(r["player_id"], []).append(r)
+        for pid, rs in by_player.items():
+            pname = rs[0]["pname"]
+            total_delta = round(sum(r["points_delta"] for r in rs), 2)
+            try:
+                cur, _ = scoring.player_week_points(con, pid, season, week)
+            except Exception:
+                cur = 0.0
+            old_total = round(cur - total_delta, 2)
+            owners = set()
+            for m in con.execute("SELECT id, name FROM members"):
+                try:
+                    stints = scoring.member_week_stints(
+                        con, m["id"], season, week)
+                except Exception:
+                    continue
+                if any(s["player_id"] == pid for s in stints):
+                    owners.add(m["name"])
+            stamp = _et_news_stamp(rs[0]["detected_at"])
+            lines = [f"Correction — {stamp}:" if stamp else "Correction:"]
+            for r in rs:
+                label = _CORRECTION_STAT_LABELS.get(
+                    r["stat_key"], r["stat_key"])
+                line = (
+                    f"• {pname} — {label} {r['old_total']:g} → "
+                    f"{r['new_total']:g} ({r['points_delta']:+.1f} pts); "
+                    f"total {old_total:.1f} → {cur:.1f}")
+                if owners:
+                    line += f" · picked by {', '.join(sorted(owners))}"
+                lines.append(line)
+            blocks.append(lines)
+    except Exception:
+        return []
+    return blocks
+
+
 def _news_post_view(con, r) -> dict:
     comments = con.execute(
         "SELECT c.body, c.created_at, m.name AS author FROM news_comments c "
         "JOIN members m ON m.id = c.member_id WHERE c.post_id = ? ORDER BY c.id",
         (r["id"],)).fetchall()
+    blocks = [b.split("\n") for b in r["body"].split("\n\n")] \
+        if r["body"] else []
+    updated = False
+    if r["kind"] == "auto" and r["window_key"]:
+        try:
+            corr = _corrections_for_window(
+                con, r["season"], r["week"], r["window_key"])
+        except Exception:
+            corr = []
+        if corr:
+            blocks.extend(corr)
+            updated = True
     return {
         "id": r["id"], "headline": r["headline"], "author": r["author"],
         "kind": r["kind"], "when": _et_news_stamp(r["created_at"]),
-        "blocks": [b.split("\n") for b in r["body"].split("\n\n")]
-                  if r["body"] else [],
+        "blocks": blocks, "updated": updated,
         "comments": [{"author": c["author"], "body": c["body"],
                       "when": _et_news_stamp(c["created_at"])}
                      for c in comments],

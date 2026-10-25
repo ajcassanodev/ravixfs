@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-10-25",
+    "version": "2026-10-25.6",
+    "title": "Published reports now get correction blocks",
+    "notes": [
+      "When a big-play stat drops after a window's report is out (an overturned fumble, a corrected sack), the live poller records it and the report gains a timestamped Correction block with the old → new numbers — the original post is never rewritten",
+      "A red CORRECTION item scrolls in the ticker linking to the amended post until the next window's report goes out; tackle-only adjustments keep flowing into totals silently"
+    ]
+  },
+  {
+    "date": "2026-10-25",
     "version": "2026-10-25.5",
     "title": "Window reports now grade your substitutions",
     "notes": [
