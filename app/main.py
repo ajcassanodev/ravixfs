@@ -730,10 +730,7 @@ def _scoring_summary(con, mid, season, week, limit=12):
     out, tackles = [], {}
     for r in rows:
         st = by_pid[r["player_id"]]
-        start = st["start"].get(r["stat_key"], 0) or 0
-        end = st["end"].get(r["stat_key"], 0) if st["end"] is not None else None
-        if not (r["new_total"] > start
-                and (end is None or r["new_total"] <= end)):
+        if not scoring.stint_counts_event(st, r["stat_key"], r["new_total"]):
             continue
         delta = round(r["new_total"] - r["old_total"], 2)
         if r["stat_key"] == "tackles":
@@ -976,26 +973,32 @@ def scoring_events_json(request: Request, since: str = ""):
     """Recent scoring plays for picked players, for the notification popups.
 
     `since` is an ISO timestamp; only events after it are returned. Players
-    are limited to this week's picked set (weekly picks, league-wide). Each
-    event carries mine=true when the viewer -- identified by the pick-link
-    session / staging pick cookie -- has that player picked.
+    are limited to this week's picked set (weekly picks plus sub-ins,
+    league-wide). Each event carries mine=true when the viewer -- identified
+    by the pick-link session / staging pick cookie -- has that player in an
+    active stint and the play falls inside it (same rule as the scoring
+    summary), so a subbed-out player's later plays never badge YOUR PICK.
     """
     con = _db.connect()
     try:
         season = _db.current_season(con)
         week = _db.current_pick_week(con, season)
         picked = {r["player_id"] for r in con.execute(
-            "SELECT player_id FROM weekly_picks WHERE season = ? AND week = ?",
-            (season, week))}
-        mine = set()
+            "SELECT player_id FROM weekly_picks WHERE season = ? AND week = ? "
+            "UNION SELECT in_player_id FROM weekly_subs "
+            "WHERE season = ? AND week = ?",
+            (season, week, season, week))}
+        mine_stints = {}
         if picked:
             token = _request_pick_token(request)
             if token:
-                mine = {r["player_id"] for r in con.execute(
-                    "SELECT wp.player_id FROM weekly_picks wp "
-                    "JOIN members m ON m.id = wp.member_id "
-                    "WHERE m.pick_token = ? AND wp.season = ? AND wp.week = ?",
-                    (token, season, week))}
+                m = con.execute(
+                    "SELECT * FROM members WHERE pick_token = ?",
+                    (token,)).fetchone()
+                if m:
+                    mine_stints = {
+                        s["player_id"]: s for s in
+                        scoring.member_week_stints(con, m["id"], season, week)}
         events = []
         if picked:
             q = ("SELECT e.*, p.name, p.team FROM scoring_events e "
@@ -1009,6 +1012,9 @@ def scoring_events_json(request: Request, since: str = ""):
             for r in con.execute(q, args):
                 if r["player_id"] not in picked:
                     continue
+                st = mine_stints.get(r["player_id"])
+                mine = (st is not None and scoring.stint_counts_event(
+                    st, r["stat_key"], r["new_total"]))
                 events.append({
                     "player": r["name"],
                     "team": r["team"],
@@ -1016,7 +1022,7 @@ def scoring_events_json(request: Request, since: str = ""):
                     "delta": round(r["new_total"] - r["old_total"], 2),
                     "points": r["points_delta"],
                     "at": r["created_at"],
-                    "mine": r["player_id"] in mine,
+                    "mine": mine,
                 })
         return JSONResponse({"events": events, "now": _db.utcnow_iso()})
     finally:

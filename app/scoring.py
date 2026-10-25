@@ -145,6 +145,20 @@ def member_week_stints(con, member_id: int, season: int, week: int):
     return ordered
 
 
+def stint_counts_event(stint, stat_key: str, new_total: float) -> bool:
+    """Whether a scoring event falls inside a stint's counted window.
+
+    Events carry cumulative totals, so the stint's own snapshots are the
+    bounds: a play counts only if it pushed the total past the entry
+    snapshot and no further than the sub-out snapshot (open-ended while
+    the stint is still active). This is the rule the scoring summary
+    and the popup YOUR PICK badge share, so both agree with the points.
+    """
+    start = stint["start"].get(stat_key, 0) or 0
+    end = stint["end"].get(stat_key, 0) if stint["end"] is not None else None
+    return new_total > start and (end is None or new_total <= end)
+
+
 def sub_outcomes(con, member_id: int, season: int, week: int):
     """Per-sub outcome lines for a member-week, in the order subs were made.
 

@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-10-25",
+    "version": "2026-10-25.3",
+    "title": "Scoring popups now respect substitutions too",
+    "notes": [
+      "The YOUR PICK badge on live scoring popups follows the same rule as the scoring summary: a subbed-out player's later plays no longer badge as yours, and a replacement's plays badge from the moment he enters",
+      "Replacements' big plays now pop up league-wide as well — before this, only original picks ever appeared"
+    ]
+  },
+  {
+    "date": "2026-10-25",
     "version": "2026-10-25.2",
     "title": "Scoring summary shows only the points you actually got",
     "notes": [
