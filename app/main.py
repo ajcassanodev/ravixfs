@@ -828,12 +828,26 @@ def _scoring_summary(con, mid, season, week, limit=12):
     replacement's pre-entry plays don't either. Cumulative totals are
     the bounds, so poller timing can't misplace a play. Big plays stay
     individual; tackle events are grouped per player so the list isn't
-    drowned in +0.1 rows.
+    drowned in +0.1 rows. Finally, each player+stat is clamped to the
+    stint's own stat points: the event ledger only records climbs, so
+    after a downward revision or a feed switch it can sum higher than
+    what the stint counted, and the summary must never show more than
+    the points that count.
     """
     stints = scoring.member_week_stints(con, mid, season, week)
     by_pid = {s["player_id"]: s for s in stints}
     if not by_pid:
         return []
+    cfg = scoring.scoring_map(con)
+    # Clamp: the event ledger only ever records climbs, so after any
+    # downward revision (or a feed switch, e.g. Tank01 -> nflverse) the
+    # summed events can exceed what the stint actually counted. Cap each
+    # player+stat at the stint's own stat points, so the summary never
+    # shows more than the points that count.
+    caps = {}
+    for s in stints:
+        for k, d in s["stats"].items():
+            caps[(s["player_id"], k)] = max(0.0, round(d * cfg.get(k, 0), 2))
     ph = ",".join("?" * len(by_pid))
     rows = con.execute(
         "SELECT e.player_id, e.stat_key, e.old_total, e.new_total, "
@@ -860,8 +874,38 @@ def _scoring_summary(con, mid, season, week, limit=12):
         play = sing if delta <= 1 else f"{plur} ×{delta:g}"
         out.append({"name": r["name"], "team": r["team"], "big": True,
                     "play": play, "points": r["points_delta"],
-                    "at": r["created_at"]})
-    for g in tackles.values():
+                    "at": r["created_at"], "pid": r["player_id"],
+                    "stat": r["stat_key"]})
+    # Clamp big plays per player+stat: drop the oldest rows first until
+    # the group's summed points fit the stint's cap.
+    big_by_key: dict = {}
+    for e in out:
+        big_by_key.setdefault((e["pid"], e["stat"]), []).append(e)
+    drop_ids = set()
+    for (pid, stat), rows in big_by_key.items():
+        cap = caps.get((pid, stat))
+        if cap is None:
+            continue
+        total = round(sum(r["points"] for r in rows), 2)
+        if total <= cap + 1e-9:
+            continue
+        for r in sorted(rows, key=lambda r: r["at"]):
+            if total <= cap + 1e-9:
+                break
+            drop_ids.add(id(r))
+            total = round(total - r["points"], 2)
+    out = [e for e in out if id(e) not in drop_ids]
+    for e in out:
+        e.pop("pid", None)
+        e.pop("stat", None)
+    for pid, g in tackles.items():
+        cap = caps.get((pid, "tackles"))
+        if cap is not None:
+            if g["points"] > cap + 1e-9:
+                g["points"] = cap
+            tdelta = by_pid[pid]["stats"].get("tackles", 0) or 0
+            if g["count"] > tdelta:
+                g["count"] = tdelta
         n = g.pop("count")
         g["play"] = "Tackle" if n == 1 else f"Tackles ×{n:g}"
         out.append(g)
