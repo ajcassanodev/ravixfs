@@ -53,7 +53,7 @@
     <div class="dash-pick{% if p.subbed_out %} subbed{% endif %}" data-idx="{{ loop.index0 }}">
       <div class="pick-main">
         <span class="dash-pname">{{ p.name }}</span>
-        <span class="dash-team">{{ p.team }}</span>{% if p.chip %}<span class="pstatus ps-{{ p.chip.kind }}">{{ p.chip.label }}</span>{% endif %}
+        <span class="dash-team">{{ p.team }}</span>{% if p.chip %}<span class="pstatus ps-{{ p.chip.kind }}">{{ p.chip.label }}</span>{% endif %}{% if p.auto %}<span class="autotag">AUTO</span>{% endif %}
         <span class="dash-pright">{% if p.subbed_out %}<span class="subtag">OUT</span>{% else %}<span class="gstatus g-{{ p.status }}">{{ p.label }}</span>{% endif %}<span class="dash-ppts" data-v="{{ p.points }}">{{ "%.1f"|format(p.points) }}</span>{% if p.can_sub %}<a class="subbtn" href="/submit/{{ token }}/sub?out={{ p.player_id }}">SUB</a>{% endif %}</span>
       </div>
     </div>
@@ -121,6 +121,22 @@
       <button type="submit">Save reminders</button>
     </form>
     <p class="note">One text and/or one email per week, only when you're missing picks. Standard message rates apply.</p>
+  </div>
+
+  <div class="dash-card">
+    <div class="dash-cardt">AUTO-PICKS</div>
+    {% if request.query_params.get('autopicks') == 'saved' %}
+    <p class="ok">Auto-picks setting saved.</p>
+    {% elif request.query_params.get('autopicks') == 'error' %}
+    <p class="err">Couldn't save that setting — try again.</p>
+    {% endif %}
+    <p class="note">When ON, the computer fills any open slots before each set of games — Thursday, Sunday 1 PM, Sunday 4 PM, Sunday night, Monday night — using the commissioner's method (currently <b>{{ auto_method }}</b>). Picks it makes are tagged AUTO and you can change them anytime before that player's kickoff. Your subs work the same as always.</p>
+    <form method="post" action="/submit/{{ token }}/autopicks">
+      <label><input type="checkbox" name="auto_picks" value="1"{% if member.auto_picks %} checked{% endif %}>
+        Fill my open slots automatically</label><br>
+      <button type="submit">Save auto-picks</button>
+    </form>
+    <p class="note">Off by default. Turn it on and you'll never post a short lineup again.</p>
   </div>
 </div>
 {% endblock %}

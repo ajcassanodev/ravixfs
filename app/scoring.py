@@ -87,18 +87,28 @@ def member_week_stints(con, member_id: int, season: int, week: int):
     player he replaced.
     """
     cfg = scoring_map(con)
-    picks = con.execute(
-        "SELECT wp.player_id, p.name, p.team FROM weekly_picks wp "
-        "JOIN players p ON p.player_id = wp.player_id "
-        "WHERE wp.member_id = ? AND wp.season = ? AND wp.week = ?",
-        (member_id, season, week),
-    ).fetchall()
+    try:
+        picks = con.execute(
+            "SELECT wp.player_id, wp.source, p.name, p.team FROM weekly_picks wp "
+            "JOIN players p ON p.player_id = wp.player_id "
+            "WHERE wp.member_id = ? AND wp.season = ? AND wp.week = ?",
+            (member_id, season, week),
+        ).fetchall()
+    except Exception:
+        # weekly_picks.source predates this deploy
+        picks = con.execute(
+            "SELECT wp.player_id, p.name, p.team FROM weekly_picks wp "
+            "JOIN players p ON p.player_id = wp.player_id "
+            "WHERE wp.member_id = ? AND wp.season = ? AND wp.week = ?",
+            (member_id, season, week),
+        ).fetchall()
     subs = week_subs(con, member_id, season, week)
 
     by_pid, roots = {}, []
     for pk in picks:
         st = {"player_id": pk["player_id"], "name": pk["name"],
               "team": pk["team"], "source": "pick",
+              "pick_source": (pk["source"] if "source" in pk.keys() else "manual"),
               "start": {k: 0 for k in STAT_KEYS}, "end": None,
               "active": True, "sub": None, "opened_by": None}
         by_pid[pk["player_id"]] = st

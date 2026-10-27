@@ -38,6 +38,12 @@ def _migrate(con) -> None:
         con.execute("ALTER TABLE members ADD COLUMN email TEXT")
     if "email_opt_in" not in cols:
         con.execute("ALTER TABLE members ADD COLUMN email_opt_in INTEGER NOT NULL DEFAULT 0")
+    if "auto_picks" not in cols:
+        con.execute("ALTER TABLE members ADD COLUMN auto_picks INTEGER NOT NULL DEFAULT 0")
+    wp_cols = {r["name"] for r in con.execute("PRAGMA table_info(weekly_picks)")}
+    if "source" not in wp_cols:
+        con.execute("ALTER TABLE weekly_picks ADD COLUMN source TEXT NOT NULL DEFAULT 'manual'")
+    con.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
 
 
 def utcnow_iso() -> str:

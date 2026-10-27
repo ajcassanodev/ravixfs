@@ -45,7 +45,8 @@ CREATE TABLE IF NOT EXISTS members (
   phone      TEXT,                      -- E.164 mobile for SMS pick reminders
   sms_opt_in INTEGER NOT NULL DEFAULT 0, -- 1 = text me Thursday mornings
   email      TEXT,                      -- address for email pick reminders
-  email_opt_in INTEGER NOT NULL DEFAULT 0 -- 1 = email me Thursday mornings
+  email_opt_in INTEGER NOT NULL DEFAULT 0, -- 1 = email me Thursday mornings
+  auto_picks INTEGER NOT NULL DEFAULT 0  -- 1 = computer fills my open slots
 );
 
 -- Thursday-morning pick reminders already sent (one per member per week).
@@ -86,6 +87,7 @@ CREATE TABLE IF NOT EXISTS weekly_picks (
   season       INTEGER NOT NULL,
   week         INTEGER NOT NULL,
   submitted_at TEXT NOT NULL,           -- ISO-8601 UTC, enforces lock rule
+  source       TEXT NOT NULL DEFAULT 'manual', -- manual | auto (computer-filled)
   PRIMARY KEY (member_id, season, week, player_id)
 );
 
@@ -250,6 +252,14 @@ CREATE TABLE IF NOT EXISTS news_deleted_windows (
   week       INTEGER NOT NULL,
   window_key TEXT NOT NULL,
   PRIMARY KEY (season, week, window_key)
+);
+
+-- Member auto-picks (Week 8 upgrade): the commissioner's method choice
+-- for computer-filled member picks. 'random' is the default (Oct 21
+-- decision); the two CPU test members keep their fixed methods regardless.
+CREATE TABLE IF NOT EXISTS settings (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
 );
 
 -- Stat corrections: the live poller records a row whenever a big-play

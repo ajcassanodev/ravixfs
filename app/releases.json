@@ -1,245 +1,256 @@
 [
-  {
-    "date": "2026-10-25",
-    "version": "2026-10-25.6",
-    "title": "Published reports now get correction blocks",
-    "notes": [
-      "When a big-play stat drops after a window's report is out (an overturned fumble, a corrected sack), the live poller records it and the report gains a timestamped Correction block with the old → new numbers — the original post is never rewritten",
-      "A red CORRECTION item scrolls in the ticker linking to the amended post until the next window's report goes out; tackle-only adjustments keep flowing into totals silently"
-    ]
-  },
-  {
-    "date": "2026-10-25",
-    "version": "2026-10-25.5",
-    "title": "Window reports now grade your substitutions",
-    "notes": [
-      "Each window recap gains a Substitutions section: every swap in that window with what the replacement scored since entering, what the benched player scored after, and a Paid off / Wash / Backfired verdict on the net",
-      "Once a window's report is out, that window's SUB notifications leave the ticker — the report is the record now, and later windows' subs keep scrolling until their report goes out"
-    ]
-  },
-  {
-    "date": "2026-10-25",
-    "version": "2026-10-25.4",
-    "title": "Substitutions now headline the ticker",
-    "notes": [
-      "Every completed substitution scrolls through the ticker with a SUB tag — who subbed, who went out, who came in, and the game clock — right alongside the window headline and the rest of the news",
-      "The ticker refresh picks new subs up automatically, so they appear within a few minutes of the swap"
-    ]
-  },
-  {
-    "date": "2026-10-25",
-    "version": "2026-10-25.3",
-    "title": "Scoring popups now respect substitutions too",
-    "notes": [
-      "The YOUR PICK badge on live scoring popups follows the same rule as the scoring summary: a subbed-out player's later plays no longer badge as yours, and a replacement's plays badge from the moment he enters",
-      "Replacements' big plays now pop up league-wide as well — before this, only original picks ever appeared"
-    ]
-  },
-  {
-    "date": "2026-10-25",
-    "version": "2026-10-25.2",
-    "title": "Scoring summary shows only the points you actually got",
-    "notes": [
-      "The scoring summary under MY PICKS now counts each player's time in your lineup: a subbed-out player's later plays no longer show up, and a replacement's plays from before he entered don't either",
-      "What you see in the summary now adds up to the points on your dashboard"
-    ]
-  },
-  {
-    "date": "2026-10-25",
-    "version": "2026-10-25.1",
-    "title": "MY PICKS rows back to a single line",
-    "notes": [
-      "The SUB button now sits on the pick row itself, next to the points, instead of on a second line underneath — each player takes exactly the same height as when you first make your picks",
-      "Subbed-out players show a compact OUT tag; the swap detail (who came in, when, points banked) stays in the history line under the header"
-    ]
-  },
-  {
-    "date": "2026-10-23",
-    "version": "2026-10-23.5",
-    "title": "League News: recaps you can reply to",
-    "notes": [
-      "NEW: League News (in the top nav) — every set of games gets its own recap post: top performers, who scored, and the week leaderboard at that moment",
-      "The ticker headline now links straight to its post — tap it to read the recap and join the conversation",
-      "Members can reply to any post; commissioner posts (rule changes, announcements) appear there too, marked in gold"
-    ]
-  },
-  {
-    "date": "2026-10-23",
-    "version": "2026-10-23.4",
-    "title": "Ticker headlines after every set of games",
-    "notes": [
-      "NEW: the points ticker now carries a HEADLINE after the week scores — written automatically from the game data, no typing by anyone",
-      "It swaps after each set of games: Thursday night, Sunday 1 PM, Sunday 4 PM, Sunday night, and Monday night — naming the window's top player and what happened to the week's lead",
-      "After the last game it becomes the WEEK FINAL headline with the winner's score"
-    ]
-  },
-  {
-    "date": "2026-10-23",
-    "version": "2026-10-23.3",
-    "title": "Scoring summary on your dashboard",
-    "notes": [
-      "NEW: a Scoring Summary card sits right under MY PICKS — every scoring play by your players this week, newest first, so you can review what the popups showed after they fade",
-      "Big plays (sacks, interceptions, forced fumbles and more) are listed one by one; tackles are grouped per player so the list stays readable",
-      "The card refreshes on its own while games are live, just like the rest of your dashboard"
-    ]
-  },
-  {
-    "date": "2026-10-23",
-    "version": "2026-10-23.2",
-    "title": "Player status chips — see who's ready and who's out",
-    "notes": [
-      "Every player now carries a status chip wherever his name appears — the projections page, your dashboard picks, and the live page",
-      "Green Ready means he's active and available; IR, Inactive and PUP chips flag the players who can't score for you this week",
-      "Status comes from the official league roster feed and refreshes automatically, so a mid-week injury shows up on your own lineup too"
-    ]
-  },
-  {
-    "date": "2026-10-23",
-    "version": "2026-10-23.1",
-    "title": "Substitution engagement report for the commissioner",
-    "notes": [
-      "The admin participation report now tracks the Week 7 substitution feature: who used their subs, when each swap happened, the points banked, what the replacement earned, and whether the swap gained points",
-      "It also follows the flow — how many members opened the sub screen and reached the confirm step — so we can see if the feature is easy to find and use"
-    ]
-  },
-  {
-    "date": "2026-10-20",
-    "version": "2026-10-20.1",
-    "title": "Week 7: live substitutions are here",
-    "notes": [
-      "NEW: live substitutions — swap a player mid-game, up to 2 per week. The two dashes in your MY PICKS header on the dashboard are your subs, like timeouts: lit means one is still in your pocket",
-      "The replacement must come from the same kickoff window, and his points start counting from the moment he enters — the player you take out keeps the points he already banked",
-      "Tap SUB on any live pick, choose the replacement, and confirm (subs can't be undone, so the dashboard asks first)",
-      "Top Performers on the dashboard now shows the week's top 5"
-    ]
-  },
-  {
-    "date": "2026-10-14",
-    "version": "2026-10-14.6",
-    "title": "Test-member cards get the full standings treatment",
-    "notes": [
-      "The Test members section now shows behind-leader, avg/week, and weekly movement (\u25b2/\u25bc) just like the main standings"
-    ]
-  },
-  {
-    "date": "2026-10-14",
-    "version": "2026-10-14.5",
-    "title": "Standings show weekly movement",
-    "notes": [
-      "Standings cards now show how many spots each member moved this week (\u25b22, \u25bc1)",
-      "Hover the arrow for the full story"
-    ]
-  },
-  {
-    "date": "2026-10-14",
-    "version": "2026-10-14.4",
-    "title": "Dashboard is home: your pick link opens your dashboard",
-    "notes": [
-      "Opening your personal pick link now takes you straight to your dashboard",
-      "The Standings link always shows the standings (with behind-leader and avg/week), even when you're signed in",
-      "Pick reminder settings moved onto the dashboard"
-    ]
-  },
-  {
-    "date": "2026-10-14",
-    "version": "2026-10-14.3",
-    "title": "No more draft: pick 5 every week",
-    "notes": [
-      "The draft is gone \u2014 every week you pick 5 fresh players from the open pool, no locked players, no trades",
-      "Picks are made on the projections page; your pick link now shows a My-picks summary",
-      "Dashboard My-picks card has an \u270e edit icon that jumps to the projections page",
-      "Standings cards now show points behind the leader and average points per week",
-      "Standings link always shows the standings; your dashboard moved to the Dashboard link"
-    ]
-  },
-  {
-    "date": "2026-10-14",
-    "notes": [
-      "Staging is now locked to personal staging pick links \u2014 no shared key, no extra login",
-      "New Release notes page: every version's changes in one place (this page)",
-      "Opening your staging pick link, pasting it on the lock page, or ?token= all unlock staging for 180 days"
-    ],
-    "title": "Staging locked to pick links + release notes",
-    "version": "2026-10-14.2"
-  },
-  {
-    "date": "2026-10-14",
-    "notes": [
-      "Member dashboard on the home page when signed in via your pick link",
-      "Scoring-event popups for picked players, with a YOUR PICK badge",
-      "Ticker animates when a score changes",
-      "/live now uses the correct week so Finals don't carry over between weeks"
-    ],
-    "title": "Member dashboard, scoring alerts & live fixes",
-    "version": "2026-10-14.1"
-  },
-  {
-    "date": "2026-10-13",
-    "notes": [
-      "Member dashboard: rank, gap to leader, season/week pies, picks with live status, top performers, trend",
-      "Scoring-event popups for picked players only",
-      "Ticker score-change animation: gold pulse + count-up",
-      "/live fixed to use the correct week between game weeks",
-      "Stylesheet cache-busting so deploys show up immediately"
-    ],
-    "title": "Dashboard, scoring alerts & ticker animation",
-    "version": "2026-10-13.1"
-  },
-  {
-    "date": "2026-10-12",
-    "notes": [
-      "Tank01 live scoring: in-progress games feed live points, finals still prefer nflverse",
-      "Tank01 trial passed 21/21 exact matches vs nflverse, including overtime plays",
-      "Staging/production database isolation repaired and verified",
-      "Email reminders support STARTTLS (port 587)"
-    ],
-    "title": "Tank01 live scoring + DB isolation fix",
-    "version": "2026-10-12.1"
-  },
-  {
-    "date": "2026-10-11",
-    "notes": [
-      "New /live page: every picked player with quarter/clock, Final, kickoff, or Bye status"
-    ],
-    "title": "Live game-status page",
-    "version": "2026-10-11.1"
-  },
-  {
-    "date": "2026-10-10",
-    "notes": [
-      "Email pick reminders, Thursday 9:00-9:15 AM ET, for members missing picks"
-    ],
-    "title": "Email reminders",
-    "version": "2026-10-10.1"
-  },
-  {
-    "date": "2026-10-09",
-    "notes": [
-      "Pick5 rebranded to Prime5 across the site (internal pick5f key unchanged)",
-      "Mobile tap targets bumped to 44px minimum",
-      "SMS pick reminders, Thursday 9:00-9:15 AM ET, opt-in only",
-      "Matchup-adjusted projections + explainable matchup badges",
-      "Projections recognizes you from your pick link \u2014 no token to paste"
-    ],
-    "title": "Prime5 rebrand, reminders & matchup intelligence",
-    "version": "2026-10-09.1"
-  },
-  {
-    "date": "2026-10-07",
-    "notes": [
-      "Shared member identity: one member record across Ravix games, pick link signs you in everywhere",
-      "Admin console header + live ticker styling"
-    ],
-    "title": "Shared member identity foundation",
-    "version": "2026-10-07.1"
-  },
-  {
-    "date": "2026-10-16",
-    "version": "2026-10-16.1",
-    "title": "Admin participation report",
-    "notes": [
-      "New admin participation page: per-member weekly pick counts, first/last pick times (ET), reminder opt-ins, and Thursday SMS/email reminder sends",
-      "Week selector across all weeks with picks; linked from the admin console"
-    ]
-  }
+ {
+  "date": "2026-10-25",
+  "version": "2026-10-25.6",
+  "title": "Published reports now get correction blocks",
+  "notes": [
+   "When a big-play stat drops after a window's report is out (an overturned fumble, a corrected sack), the live poller records it and the report gains a timestamped Correction block with the old \u2192 new numbers \u2014 the original post is never rewritten",
+   "A red CORRECTION item scrolls in the ticker linking to the amended post until the next window's report goes out; tackle-only adjustments keep flowing into totals silently"
+  ]
+ },
+ {
+  "date": "2026-10-25",
+  "version": "2026-10-25.5",
+  "title": "Window reports now grade your substitutions",
+  "notes": [
+   "Each window recap gains a Substitutions section: every swap in that window with what the replacement scored since entering, what the benched player scored after, and a Paid off / Wash / Backfired verdict on the net",
+   "Once a window's report is out, that window's SUB notifications leave the ticker \u2014 the report is the record now, and later windows' subs keep scrolling until their report goes out"
+  ]
+ },
+ {
+  "date": "2026-10-25",
+  "version": "2026-10-25.4",
+  "title": "Substitutions now headline the ticker",
+  "notes": [
+   "Every completed substitution scrolls through the ticker with a SUB tag \u2014 who subbed, who went out, who came in, and the game clock \u2014 right alongside the window headline and the rest of the news",
+   "The ticker refresh picks new subs up automatically, so they appear within a few minutes of the swap"
+  ]
+ },
+ {
+  "date": "2026-10-25",
+  "version": "2026-10-25.3",
+  "title": "Scoring popups now respect substitutions too",
+  "notes": [
+   "The YOUR PICK badge on live scoring popups follows the same rule as the scoring summary: a subbed-out player's later plays no longer badge as yours, and a replacement's plays badge from the moment he enters",
+   "Replacements' big plays now pop up league-wide as well \u2014 before this, only original picks ever appeared"
+  ]
+ },
+ {
+  "date": "2026-10-25",
+  "version": "2026-10-25.2",
+  "title": "Scoring summary shows only the points you actually got",
+  "notes": [
+   "The scoring summary under MY PICKS now counts each player's time in your lineup: a subbed-out player's later plays no longer show up, and a replacement's plays from before he entered don't either",
+   "What you see in the summary now adds up to the points on your dashboard"
+  ]
+ },
+ {
+  "date": "2026-10-25",
+  "version": "2026-10-25.1",
+  "title": "MY PICKS rows back to a single line",
+  "notes": [
+   "The SUB button now sits on the pick row itself, next to the points, instead of on a second line underneath \u2014 each player takes exactly the same height as when you first make your picks",
+   "Subbed-out players show a compact OUT tag; the swap detail (who came in, when, points banked) stays in the history line under the header"
+  ]
+ },
+ {
+  "date": "2026-10-23",
+  "version": "2026-10-23.5",
+  "title": "League News: recaps you can reply to",
+  "notes": [
+   "NEW: League News (in the top nav) \u2014 every set of games gets its own recap post: top performers, who scored, and the week leaderboard at that moment",
+   "The ticker headline now links straight to its post \u2014 tap it to read the recap and join the conversation",
+   "Members can reply to any post; commissioner posts (rule changes, announcements) appear there too, marked in gold"
+  ]
+ },
+ {
+  "date": "2026-10-23",
+  "version": "2026-10-23.4",
+  "title": "Ticker headlines after every set of games",
+  "notes": [
+   "NEW: the points ticker now carries a HEADLINE after the week scores \u2014 written automatically from the game data, no typing by anyone",
+   "It swaps after each set of games: Thursday night, Sunday 1 PM, Sunday 4 PM, Sunday night, and Monday night \u2014 naming the window's top player and what happened to the week's lead",
+   "After the last game it becomes the WEEK FINAL headline with the winner's score"
+  ]
+ },
+ {
+  "date": "2026-10-23",
+  "version": "2026-10-23.3",
+  "title": "Scoring summary on your dashboard",
+  "notes": [
+   "NEW: a Scoring Summary card sits right under MY PICKS \u2014 every scoring play by your players this week, newest first, so you can review what the popups showed after they fade",
+   "Big plays (sacks, interceptions, forced fumbles and more) are listed one by one; tackles are grouped per player so the list stays readable",
+   "The card refreshes on its own while games are live, just like the rest of your dashboard"
+  ]
+ },
+ {
+  "date": "2026-10-23",
+  "version": "2026-10-23.2",
+  "title": "Player status chips \u2014 see who's ready and who's out",
+  "notes": [
+   "Every player now carries a status chip wherever his name appears \u2014 the projections page, your dashboard picks, and the live page",
+   "Green Ready means he's active and available; IR, Inactive and PUP chips flag the players who can't score for you this week",
+   "Status comes from the official league roster feed and refreshes automatically, so a mid-week injury shows up on your own lineup too"
+  ]
+ },
+ {
+  "date": "2026-10-23",
+  "version": "2026-10-23.1",
+  "title": "Substitution engagement report for the commissioner",
+  "notes": [
+   "The admin participation report now tracks the Week 7 substitution feature: who used their subs, when each swap happened, the points banked, what the replacement earned, and whether the swap gained points",
+   "It also follows the flow \u2014 how many members opened the sub screen and reached the confirm step \u2014 so we can see if the feature is easy to find and use"
+  ]
+ },
+ {
+  "date": "2026-10-20",
+  "version": "2026-10-20.1",
+  "title": "Week 7: live substitutions are here",
+  "notes": [
+   "NEW: live substitutions \u2014 swap a player mid-game, up to 2 per week. The two dashes in your MY PICKS header on the dashboard are your subs, like timeouts: lit means one is still in your pocket",
+   "The replacement must come from the same kickoff window, and his points start counting from the moment he enters \u2014 the player you take out keeps the points he already banked",
+   "Tap SUB on any live pick, choose the replacement, and confirm (subs can't be undone, so the dashboard asks first)",
+   "Top Performers on the dashboard now shows the week's top 5"
+  ]
+ },
+ {
+  "date": "2026-10-14",
+  "version": "2026-10-14.6",
+  "title": "Test-member cards get the full standings treatment",
+  "notes": [
+   "The Test members section now shows behind-leader, avg/week, and weekly movement (\u25b2/\u25bc) just like the main standings"
+  ]
+ },
+ {
+  "date": "2026-10-14",
+  "version": "2026-10-14.5",
+  "title": "Standings show weekly movement",
+  "notes": [
+   "Standings cards now show how many spots each member moved this week (\u25b22, \u25bc1)",
+   "Hover the arrow for the full story"
+  ]
+ },
+ {
+  "date": "2026-10-14",
+  "version": "2026-10-14.4",
+  "title": "Dashboard is home: your pick link opens your dashboard",
+  "notes": [
+   "Opening your personal pick link now takes you straight to your dashboard",
+   "The Standings link always shows the standings (with behind-leader and avg/week), even when you're signed in",
+   "Pick reminder settings moved onto the dashboard"
+  ]
+ },
+ {
+  "date": "2026-10-14",
+  "version": "2026-10-14.3",
+  "title": "No more draft: pick 5 every week",
+  "notes": [
+   "The draft is gone \u2014 every week you pick 5 fresh players from the open pool, no locked players, no trades",
+   "Picks are made on the projections page; your pick link now shows a My-picks summary",
+   "Dashboard My-picks card has an \u270e edit icon that jumps to the projections page",
+   "Standings cards now show points behind the leader and average points per week",
+   "Standings link always shows the standings; your dashboard moved to the Dashboard link"
+  ]
+ },
+ {
+  "date": "2026-10-14",
+  "notes": [
+   "Staging is now locked to personal staging pick links \u2014 no shared key, no extra login",
+   "New Release notes page: every version's changes in one place (this page)",
+   "Opening your staging pick link, pasting it on the lock page, or ?token= all unlock staging for 180 days"
+  ],
+  "title": "Staging locked to pick links + release notes",
+  "version": "2026-10-14.2"
+ },
+ {
+  "date": "2026-10-14",
+  "notes": [
+   "Member dashboard on the home page when signed in via your pick link",
+   "Scoring-event popups for picked players, with a YOUR PICK badge",
+   "Ticker animates when a score changes",
+   "/live now uses the correct week so Finals don't carry over between weeks"
+  ],
+  "title": "Member dashboard, scoring alerts & live fixes",
+  "version": "2026-10-14.1"
+ },
+ {
+  "date": "2026-10-13",
+  "notes": [
+   "Member dashboard: rank, gap to leader, season/week pies, picks with live status, top performers, trend",
+   "Scoring-event popups for picked players only",
+   "Ticker score-change animation: gold pulse + count-up",
+   "/live fixed to use the correct week between game weeks",
+   "Stylesheet cache-busting so deploys show up immediately"
+  ],
+  "title": "Dashboard, scoring alerts & ticker animation",
+  "version": "2026-10-13.1"
+ },
+ {
+  "date": "2026-10-12",
+  "notes": [
+   "Tank01 live scoring: in-progress games feed live points, finals still prefer nflverse",
+   "Tank01 trial passed 21/21 exact matches vs nflverse, including overtime plays",
+   "Staging/production database isolation repaired and verified",
+   "Email reminders support STARTTLS (port 587)"
+  ],
+  "title": "Tank01 live scoring + DB isolation fix",
+  "version": "2026-10-12.1"
+ },
+ {
+  "date": "2026-10-11",
+  "notes": [
+   "New /live page: every picked player with quarter/clock, Final, kickoff, or Bye status"
+  ],
+  "title": "Live game-status page",
+  "version": "2026-10-11.1"
+ },
+ {
+  "date": "2026-10-10",
+  "notes": [
+   "Email pick reminders, Thursday 9:00-9:15 AM ET, for members missing picks"
+  ],
+  "title": "Email reminders",
+  "version": "2026-10-10.1"
+ },
+ {
+  "date": "2026-10-09",
+  "notes": [
+   "Pick5 rebranded to Prime5 across the site (internal pick5f key unchanged)",
+   "Mobile tap targets bumped to 44px minimum",
+   "SMS pick reminders, Thursday 9:00-9:15 AM ET, opt-in only",
+   "Matchup-adjusted projections + explainable matchup badges",
+   "Projections recognizes you from your pick link \u2014 no token to paste"
+  ],
+  "title": "Prime5 rebrand, reminders & matchup intelligence",
+  "version": "2026-10-09.1"
+ },
+ {
+  "date": "2026-10-07",
+  "notes": [
+   "Shared member identity: one member record across Ravix games, pick link signs you in everywhere",
+   "Admin console header + live ticker styling"
+  ],
+  "title": "Shared member identity foundation",
+  "version": "2026-10-07.1"
+ },
+ {
+  "date": "2026-10-16",
+  "version": "2026-10-16.1",
+  "title": "Admin participation report",
+  "notes": [
+   "New admin participation page: per-member weekly pick counts, first/last pick times (ET), reminder opt-ins, and Thursday SMS/email reminder sends",
+   "Week selector across all weeks with picks; linked from the admin console"
+  ]
+ },
+ {
+  "date": "2026-10-27",
+  "version": "2026-10-27.1",
+  "title": "Member auto-picks (Week 8 upgrade)",
+  "notes": [
+   "New AUTO-PICKS card on the dashboard, next to pick reminders: turn it on and the computer fills any open slots before each set of games (Thursday, Sunday 1 PM, Sunday 4 PM, Sunday night, Monday night)",
+   "Auto-filled picks are tagged AUTO on your MY PICKS rows and stay editable until that player kicks off; subs work the same as always",
+   "New admin method switch on the Commissioner console: Random (default) or CPU Smart controls member auto-picks; CPU Random and CPU Smart keep their fixed methods regardless",
+   "Fills only use players whose games have not started yet, and never re-fill a player you subbed out"
+  ]
+ }
 ]

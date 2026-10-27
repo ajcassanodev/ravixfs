@@ -272,6 +272,18 @@ def main(check: bool = False):
         except Exception as exc:
             print(f"cpu picks skipped: {exc}")
 
+    # ---- Member auto-picks (Week 8 upgrade) ----
+    # Members with the dashboard toggle ON get open slots filled from
+    # players whose games haven't started, using the commissioner's
+    # method setting. Runs every cycle so an emptied slot refills
+    # before the next window. Never breaks the poll.
+    if not check:
+        try:
+            from app import cpu_picks as _cpu
+            print(_cpu.run_member_auto_picks(con, season, datetime.now(ET)))
+        except Exception as exc:
+            print(f"member auto-picks skipped: {exc}")
+
     # ---- Tank01 trial: live box-score snapshots (one-night MNF trial) ----
     # Rides the 15-min timer; safe no-op without TANK01_API_KEY or outside
     # the trial window. Stores raw payloads for post-game freshness compare.

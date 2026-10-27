@@ -16,6 +16,7 @@ from . import scoring
 from . import sms as _sms
 from . import emailer as _emailer
 from . import matchup
+from . import cpu_picks as _cpu
 from shared import identity as _identity
 
 ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "")
@@ -1009,6 +1010,7 @@ def _dashboard_context(con, request):
             "name": pname, "team": pteam, "src": st["source"],
             "player_id": pid, "points": pts, "status": status, "label": label,
             "chip": scoring.status_chip(prow["status"] if prow else ""),
+            "auto": st.get("pick_source") == "auto",
             "subbed_out": not st["active"],
             "out_label": st["sub"]["game_label"] if st["sub"] else None,
             "in_label": (st["opened_by"]["game_label"]
@@ -1080,6 +1082,8 @@ def _dashboard_context(con, request):
     return {
         "member_name": m["name"], "season": season, "week": pick_week,
         "token": token, "member": m,
+        "auto_method": ("CPU Smart" if _cpu.get_auto_method(con) == "smart"
+                        else "Random"),
         "week_live": week_live, "rank": rank, "total": total,
         "leader_name": leader_name, "leader_total": leader_total,
         "gap": round(leader_total - (total or 0), 2),
@@ -1678,6 +1682,27 @@ def save_reminders(token: str, phone: str = Form(""), sms_opt_in: str = Form("")
     return RedirectResponse(f"/dashboard?reminders=saved", status_code=303)
 
 
+@app.post("/submit/{token}/autopicks")
+def save_autopicks(token: str, auto_picks: str = Form("")):
+    """Save a member's auto-picks toggle from their dashboard."""
+    con = _db.connect()
+    m = con.execute("SELECT * FROM members WHERE pick_token = ?", (token,)).fetchone()
+    if not m:
+        con.close()
+        raise HTTPException(404, "bad pick link")
+    try:
+        con.execute(
+            "UPDATE members SET auto_picks = ? WHERE id = ?",
+            (1 if auto_picks == "1" else 0, m["id"]),
+        )
+        con.commit()
+    except Exception:
+        con.close()
+        return RedirectResponse("/dashboard?autopicks=error", status_code=303)
+    con.close()
+    return RedirectResponse("/dashboard?autopicks=saved", status_code=303)
+
+
 # ---- Live substitutions (Week 7 rule) ----
 
 def _log_sub_event(con, m, season, week, event, out_pid="", in_pid="",
@@ -1912,11 +1937,19 @@ def admin_home(request: Request, token: str):
     season = _db.current_season(con)
     members = con.execute("SELECT * FROM members ORDER BY name").fetchall()
     cfg = con.execute("SELECT * FROM scoring_config").fetchall()
+    try:
+        auto_members = [m["name"] for m in con.execute(
+            "SELECT name FROM members WHERE auto_picks = 1 ORDER BY name")]
+    except Exception:
+        auto_members = []  # auto_picks predates this deploy
+    auto_method = _cpu.get_auto_method(con)
     ticker = _ticker_data(con, season, include_test=_is_staging_host(request.headers.get("host", "")))
     con.close()
     return templates.TemplateResponse(request, "admin.html", {
         "request": request, "token": token, "season": season,
         "members": members, "scoring": cfg, "ticker": ticker,
+        "auto_method": auto_method,
+        "auto_members": auto_members,
     })
 
 
@@ -1947,6 +1980,18 @@ def admin_scoring(token: str, stat_key: str = Form(""), points: float = Form(0))
     con = _db.connect()
     con.execute("UPDATE scoring_config SET points=? WHERE stat_key=?", (points, stat_key))
     con.commit()
+    con.close()
+    return RedirectResponse(f"/admin/{token}", status_code=303)
+
+
+@app.post("/admin/{token}/autopicks-method")
+def admin_autopicks_method(token: str, method: str = Form("")):
+    if not _admin_ok(token):
+        raise HTTPException(404, "not found")
+    if method not in _cpu.METHODS:
+        raise HTTPException(400, "unknown method")
+    con = _db.connect()
+    _cpu.set_auto_method(con, method)
     con.close()
     return RedirectResponse(f"/admin/{token}", status_code=303)
 

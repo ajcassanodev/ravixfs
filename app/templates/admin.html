@@ -26,6 +26,16 @@
   <button>Add member</button>
 </form>
 
+<h3>Member auto-picks</h3>
+<p>Members with the dashboard toggle ON get open slots filled before each set of games. The method below controls <em>member</em> auto-picks only — CPU Random and CPU Smart keep their fixed methods regardless.</p>
+<form method="post" action="/admin/{{ token }}/autopicks-method">
+  <label><input type="radio" name="method" value="random"{% if auto_method == 'random' %} checked{% endif %}> Random — uniform draw from the pool (can land hurt, bye, inactive)</label><br>
+  <label><input type="radio" name="method" value="smart"{% if auto_method == 'smart' %} checked{% endif %}> CPU Smart — top matchup-adjusted projections, skipping bye and non-active</label><br>
+  <button>Save method</button>
+</form>
+<p class="note">Currently: <b>{{ 'CPU Smart' if auto_method == 'smart' else 'Random' }}</b>
+  · Members with auto-picks ON: {% if auto_members %}{{ auto_members|join(', ') }}{% else %}none yet{% endif %}</p>
+
 <h3>Scoring config</h3>
 <p>Changing these recalculates <em>all</em> past weeks instantly — points are never stored.</p>
 <table>
