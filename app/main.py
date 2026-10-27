@@ -295,7 +295,9 @@ def _is_staging_host(host: str) -> bool:
 # player's points belong to the window his game kicked off in (subs swap
 # within a window, so stint points stay in-window). Returns "" until a
 # closed window actually has points in it, so the segment never shows
-# stale or empty copy.
+# stale or empty copy. The final window is the exception: it headlines
+# (and posts) once closed even with no points, since it carries the
+# week's final record and the season standings.
 
 def _window_key(kickoff_utc):
     """((ET date, daypart), kickoff datetime) for a kickoff ISO string."""
@@ -481,11 +483,14 @@ def _headline_for_window(week: int, active, is_final: bool) -> str:
 
 
 def _active_window(ordered):
-    """Latest closed window that actually has points in it, or None."""
+    """Latest closed window that actually has points in it, or the final
+    window once closed even with none, or None."""
     now = datetime.now(timezone.utc)
     active = None
     for w in ordered:
-        if now >= w["close"] and any(v > 0 for v in w["gains"].values()):
+        if now >= w["close"] and (
+                w is ordered[-1]
+                or any(v > 0 for v in w["gains"].values())):
             active = w
     return active
 
@@ -613,7 +618,12 @@ def _ensure_news_posts(con, season: int, week: int, entries, member_lines):
         wk = _window_key_str(w["key"])
         if wk in existing or wk in deleted:
             continue
-        if now < w["close"] or not any(v > 0 for v in w["gains"].values()):
+        # The final window is the week's record (and carries the season
+        # standings), so it posts once closed even when the finale itself
+        # scores nothing — a quiet Monday night must not swallow it.
+        if now < w["close"] or (
+                w is not ordered[-1]
+                and not any(v > 0 for v in w["gains"].values())):
             continue
         is_final = w is ordered[-1]
         cur = con.execute(
