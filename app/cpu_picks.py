@@ -287,9 +287,12 @@ def run_member_auto_picks(con, season: int, now_et: datetime = None) -> str:
 # Staging only. Smart manages its lineup like a member, so we can watch
 # what it does in real games before bonus picks arrive in Week 10:
 #
-#   - Pre-kickoff: a Smart pick confirmed inactive (non-ACT status)
-#     before its game starts gets a free edit to the top-Adj player
-#     from the same kickoff window. This costs no sub.
+#   - Pre-kickoff: Smart can re-pick any pick whose game hasn't
+#     started. An inactive (non-ACT) or bye pick always moves to the
+#     best available unstarted player; an active pick moves only when
+#     another available unstarted player's Adj beats its own by
+#     SMART_SUB_MARGIN (1.0) or more. Edits are free and unlimited —
+#     the margin is what keeps Smart from churning on noise.
 #   - Live: every poller cycle, each live Smart pick's projected
 #     REMAINING points (Adj x share of game left) is compared with the
 #     best same-window replacement's projected remaining. Smart subs
@@ -358,6 +361,41 @@ def _game_progress(team, states, kickoff_utc, now_utc):
     return max(0.0, min(1.0, hours / _GAME_LEN_HOURS))
 
 
+def _repick_choice(out_pid, out_status, out_ko, out_adj, rows, seen,
+                   unstarted, now_utc):
+    """Replacement player_id for a Smart pick, or None to stand pat.
+
+    Pure decision logic (no DB): the caller supplies the projections
+    rows, the current lineup set, and the set of not-yet-started
+    player_ids. A started pick (kickoff passed) never moves here —
+    only live subs can move it. An inactive/bye pick always moves to
+    the best available unstarted player; an active pick moves only
+    when the best available player's Adj beats its own by
+    SMART_SUB_MARGIN. Candidates must be ACT, have an opponent, and
+    not already be in the lineup."""
+    kdt = _parse_ko(out_ko)
+    if kdt is not None and kdt <= now_utc:
+        return None
+    status = (out_status or "").upper()
+    must_move = (out_ko is None) or (status and status != "ACT")
+    cands = [r for r in rows
+             if r["player_id"] not in seen
+             and r["player_id"] in unstarted
+             and r.get("opponent")
+             and (r["status"] or "").upper() == "ACT"]
+    if not cands:
+        return None
+    cands.sort(key=lambda r: (-r["adj_pts"], -r["proj_pts"], r["name"]))
+    best = cands[0]
+    if must_move:
+        return best["player_id"]
+    if out_adj is None:
+        return None
+    if best["adj_pts"] >= out_adj + SMART_SUB_MARGIN:
+        return best["player_id"]
+    return None
+
+
 def run_smart_subs(con, season: int, now_et: datetime = None) -> str:
     """CPU Smart's sub decisions for the current week, staging only."""
     if not _staging_db():
@@ -383,33 +421,38 @@ def run_smart_subs(con, season: int, now_et: datetime = None) -> str:
             return ko_by_pid[pid]
         return _db.player_kickoff(con, pid, season, week)
 
-    # ---- Pre-kickoff: free edit for confirmed-inactive picks ----
+    # ---- Pre-kickoff: full re-pick ability, free edits ----
+    # Any pick whose game hasn't started can move: inactive/bye picks
+    # always move, active picks move only on a 1.0+ Adj edge. The
+    # pool is every unstarted player (any window — members enjoy the
+    # same freedom on pre-kickoff edits); the margin is the only
+    # stabilizer, and it is enough: Adj is fixed during the week, so
+    # a swap strictly improves the slot and can never oscillate.
     stints = _scoring.member_week_stints(con, mid, season, week)
     seen = {s["player_id"] for s in stints}
+    unstarted = set()
+    for pid, ko in ko_by_pid.items():
+        kdt = _parse_ko(ko)
+        if kdt is not None and kdt > now_utc:
+            unstarted.add(pid)
+    adj = {r["player_id"]: r for r in rows}
     edited = []
     for s in stints:
         if not s["active"]:
             continue
         pid = s["player_id"]
-        ko = _ko(pid)
-        kdt = _parse_ko(ko)
-        if kdt is None or kdt <= now_utc:
-            continue
         prow = con.execute(
             "SELECT status FROM players WHERE player_id = ?",
             (pid,)).fetchone()
         status = (prow["status"] if prow else "") or ""
-        if not status or status.upper() == "ACT":
+        out_row = adj.get(pid)
+        new_pid = _repick_choice(
+            pid, status, _ko(pid),
+            out_row["adj_pts"] if out_row else None,
+            rows, seen, unstarted, now_utc)
+        if new_pid is None:
             continue
-        cands = [r for r in rows
-                 if r["player_id"] not in seen
-                 and r.get("opponent")
-                 and (r["status"] or "").upper() == "ACT"
-                 and ko_by_pid.get(r["player_id"]) == ko]
-        if not cands:
-            continue
-        cands.sort(key=lambda r: (-r["adj_pts"], -r["proj_pts"], r["name"]))
-        new_pid = cands[0]["player_id"]
+        new_name = adj[new_pid]["name"] if new_pid in adj else new_pid
         con.execute(
             "UPDATE weekly_picks SET player_id = ? "
             "WHERE member_id = ? AND season = ? AND week = ? "
@@ -417,7 +460,7 @@ def run_smart_subs(con, season: int, now_et: datetime = None) -> str:
             (new_pid, mid, season, week, pid))
         seen.discard(pid)
         seen.add(new_pid)
-        edited.append(f"{s['name']} -> {cands[0]['name']}")
+        edited.append(f"{s['name']} -> {new_name}")
     if edited:
         con.commit()
     edit_note = (f" (pre-kickoff edits: {', '.join(edited)})"
@@ -441,7 +484,6 @@ def run_smart_subs(con, season: int, now_et: datetime = None) -> str:
     if not live_stints:
         return f"smart subs week {week}: no live games{edit_note}"
     states = _gamestate.fetch_states(week)
-    adj = {r["player_id"]: r for r in rows}
     best = None
     for s, ko in live_stints:
         live_out, label = _game_live(con, s["team"], s["player_id"],

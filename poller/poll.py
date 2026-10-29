@@ -285,7 +285,7 @@ def main(check: bool = False):
             print(f"member auto-picks skipped: {exc}")
 
     # ---- CPU Smart live subs (Week 8) ----
-    # Smart manages its lineup like a member: pre-kickoff inactive swaps
+    # Smart manages its lineup like a member: pre-kickoff re-picks
     # (free) and live subs when the projected-remaining edge clears 1.0.
     # Staging only, Smart only; CPU Random untouched. Never breaks the
     # poll: at most one sub per cycle, and any failure just logs.

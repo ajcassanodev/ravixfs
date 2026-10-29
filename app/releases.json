@@ -1,6 +1,15 @@
 [
  {
   "date": "2026-10-29",
+  "version": "2026-10-29.2",
+  "title": "CPU Smart can re-pick before lockout",
+  "notes": [
+   "Smart now has full pre-kickoff freedom: any pick whose game hasn't started can move. An inactive or bye pick always moves to the best available unstarted player; an active pick moves only when another available player's Adj beats its own by a full point or more",
+   "Re-picks are free and unlimited like members' pre-kickoff edits, and they can cross kickoff windows — the 1.0-point margin is what keeps Smart from churning on noise. CPU Random is untouched"
+  ]
+ },
+ {
+  "date": "2026-10-29",
   "version": "2026-10-29.1",
   "title": "CPU Smart manages its own lineup",
   "notes": [
