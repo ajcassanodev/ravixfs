@@ -296,6 +296,17 @@ def main(check: bool = False):
         except Exception as exc:
             print(f"smart subs skipped: {exc}")
 
+    # ---- CPU Smart learning loop (Week 8) ----
+    # Settles just-closed weeks' Smart decisions and auto-tunes the
+    # sub/re-pick margin from the cumulative gated record. Staging
+    # only. Never breaks the poll.
+    if not check:
+        try:
+            from app import cpu_picks as _cpu
+            print(_cpu.run_smart_learning(con, season, datetime.now(ET)))
+        except Exception as exc:
+            print(f"smart learning skipped: {exc}")
+
     # ---- Tank01 trial: live box-score snapshots (one-night MNF trial) ----
     # Rides the 15-min timer; safe no-op without TANK01_API_KEY or outside
     # the trial window. Stores raw payloads for post-game freshness compare.

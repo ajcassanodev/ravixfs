@@ -1,6 +1,16 @@
 [
  {
   "date": "2026-10-29",
+  "version": "2026-10-29.3",
+  "title": "CPU Smart learns from its own calls",
+  "notes": [
+   "Every Smart decision now goes into a learning ledger with its predicted edge, and once its week closes the actual net is settled against it — live subs graded like the recaps grade yours, re-picks by full-week points gained vs standing pat",
+   "After each closed week the margin auto-tunes from the cumulative record: if Smart's predicted edges keep running ahead of actual nets, the margin rises and Smart demands more evidence before acting; if it keeps underpromising, the margin falls. Moves are capped at 0.25 per week inside a 0.5–2.0 band, and tuning starts after 6 judged calls",
+   "Watch it on the admin participation page, under Live substitutions. Forced inactive/bye moves don't count as judgments — only calls Smart chose to make"
+  ]
+ },
+ {
+  "date": "2026-10-29",
   "version": "2026-10-29.2",
   "title": "CPU Smart can re-pick before lockout",
   "notes": [

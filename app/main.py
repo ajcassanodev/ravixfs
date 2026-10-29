@@ -2059,11 +2059,16 @@ def admin_participation(request: Request, token: str, week: int = 0):
         sub_summary = {"total_subs": total_subs,
                        "members_with": members_with,
                        "members": len(sub_rows), "funnel": funnel}
+    try:
+        smart_learning = _cpu.learning_summary(con, season)
+    except Exception:
+        smart_learning = None
     con.close()
     return templates.TemplateResponse(request, "participation.html", {
         "request": request, "token": token, "season": season,
         "weeks": weeks, "week": week, "rows": rows,
         "sub_rows": sub_rows, "sub_summary": sub_summary,
+        "smart_learning": smart_learning,
     })
 
 

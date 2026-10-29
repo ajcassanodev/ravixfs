@@ -309,8 +309,67 @@ def run_member_auto_picks(con, season: int, now_et: datetime = None) -> str:
 # poller cycle (the largest edge); the next cycle reconsiders.
 # CPU Random is untouched.
 
-SMART_SUB_MARGIN = 1.0
+DEFAULT_MARGIN = 1.0
+MIN_CALLS = 6
+MARGIN_FLOOR, MARGIN_CEIL = 0.5, 2.0
+MAX_STEP = 0.25
+LEARN_RATE = 0.5
 _GAME_LEN_HOURS = 3.25
+
+
+def _smart_id(con):
+    """CPU Smart's member id, or None when the member doesn't exist."""
+    row = con.execute(
+        "SELECT id FROM members WHERE name = 'CPU Smart'").fetchone()
+    return row["id"] if row else None
+
+
+def _ensure_decisions(con):
+    con.execute(
+        "CREATE TABLE IF NOT EXISTS smart_decisions ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "member_id INTEGER NOT NULL, season INTEGER NOT NULL, "
+        "week INTEGER NOT NULL, kind TEXT NOT NULL, "
+        "out_player_id TEXT NOT NULL, in_player_id TEXT NOT NULL, "
+        "edge REAL NOT NULL, gated INTEGER NOT NULL DEFAULT 1, "
+        "net REAL, settled INTEGER NOT NULL DEFAULT 0, "
+        "decided_at TEXT NOT NULL, settled_at TEXT)")
+
+
+def get_smart_margin(con) -> float:
+    """Current Smart margin; the 1.0 default unless learning moved it."""
+    try:
+        row = con.execute(
+            "SELECT value FROM settings WHERE key = 'smart_sub_margin'"
+        ).fetchone()
+        if row:
+            return max(MARGIN_FLOOR,
+                       min(MARGIN_CEIL, float(row["value"])))
+    except Exception:
+        pass
+    return DEFAULT_MARGIN
+
+
+def _set_smart_margin(con, margin: float) -> None:
+    _ensure_settings(con)
+    con.execute(
+        "INSERT INTO settings (key, value) VALUES ('smart_sub_margin', ?) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (f"{margin:.2f}",))
+    con.commit()
+
+
+def _log_decision(con, mid, season, week, kind, out_pid, in_pid, edge,
+                  gated):
+    """Append one Smart decision to the learning ledger. The caller
+    commits: this rides the same transaction as the sub/pick write."""
+    _ensure_decisions(con)
+    con.execute(
+        "INSERT INTO smart_decisions (member_id, season, week, kind, "
+        "out_player_id, in_player_id, edge, gated, decided_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?)",
+        (mid, season, week, kind, out_pid, in_pid, round(edge, 2),
+         1 if gated else 0, _db.utcnow_iso()))
 
 
 def _game_live(con, team, pid, season, week, states):
@@ -362,20 +421,23 @@ def _game_progress(team, states, kickoff_utc, now_utc):
 
 
 def _repick_choice(out_pid, out_status, out_ko, out_adj, rows, seen,
-                   unstarted, now_utc):
-    """Replacement player_id for a Smart pick, or None to stand pat.
+                   unstarted, now_utc, margin=DEFAULT_MARGIN):
+    """(replacement_id, predicted_edge, gated) for a Smart pick, or
+    (None, None, False) to stand pat.
 
     Pure decision logic (no DB): the caller supplies the projections
     rows, the current lineup set, and the set of not-yet-started
     player_ids. A started pick (kickoff passed) never moves here —
     only live subs can move it. An inactive/bye pick always moves to
-    the best available unstarted player; an active pick moves only
-    when the best available player's Adj beats its own by
-    SMART_SUB_MARGIN. Candidates must be ACT, have an opponent, and
-    not already be in the lineup."""
+    the best available unstarted player (predicted gain = the
+    replacement's whole Adj, since the dropped player scores 0) and
+    is NOT a margin judgment (gated=False). An active pick moves
+    only when the best available player's Adj beats its own by the
+    margin (gated=True). Candidates must be ACT, have an opponent,
+    and not already be in the lineup."""
     kdt = _parse_ko(out_ko)
     if kdt is not None and kdt <= now_utc:
-        return None
+        return None, None, False
     status = (out_status or "").upper()
     must_move = (out_ko is None) or (status and status != "ACT")
     cands = [r for r in rows
@@ -384,16 +446,17 @@ def _repick_choice(out_pid, out_status, out_ko, out_adj, rows, seen,
              and r.get("opponent")
              and (r["status"] or "").upper() == "ACT"]
     if not cands:
-        return None
+        return None, None, False
     cands.sort(key=lambda r: (-r["adj_pts"], -r["proj_pts"], r["name"]))
     best = cands[0]
     if must_move:
-        return best["player_id"]
+        return best["player_id"], best["adj_pts"], False
     if out_adj is None:
-        return None
-    if best["adj_pts"] >= out_adj + SMART_SUB_MARGIN:
-        return best["player_id"]
-    return None
+        return None, None, False
+    edge = best["adj_pts"] - out_adj
+    if edge >= margin:
+        return best["player_id"], edge, True
+    return None, None, False
 
 
 def run_smart_subs(con, season: int, now_et: datetime = None) -> str:
@@ -403,11 +466,10 @@ def run_smart_subs(con, season: int, now_et: datetime = None) -> str:
     now_et = now_et or datetime.now(ET)
     now_utc = now_et.astimezone(timezone.utc)
     week = _db.current_pick_week(con, season)
-    row = con.execute(
-        "SELECT id FROM members WHERE name = 'CPU Smart'").fetchone()
-    if not row:
+    mid = _smart_id(con)
+    if mid is None:
         return "smart subs skipped: no CPU Smart member"
-    mid = row["id"]
+    margin = get_smart_margin(con)
     rows = _scoring.projections(con, season, week - 1)
     _matchup.annotate_rows(con, season, week, week - 1, rows,
                            _scoring.scoring_map(con))
@@ -446,10 +508,10 @@ def run_smart_subs(con, season: int, now_et: datetime = None) -> str:
             (pid,)).fetchone()
         status = (prow["status"] if prow else "") or ""
         out_row = adj.get(pid)
-        new_pid = _repick_choice(
+        new_pid, edge, gated = _repick_choice(
             pid, status, _ko(pid),
             out_row["adj_pts"] if out_row else None,
-            rows, seen, unstarted, now_utc)
+            rows, seen, unstarted, now_utc, margin)
         if new_pid is None:
             continue
         new_name = adj[new_pid]["name"] if new_pid in adj else new_pid
@@ -458,6 +520,8 @@ def run_smart_subs(con, season: int, now_et: datetime = None) -> str:
             "WHERE member_id = ? AND season = ? AND week = ? "
             "AND player_id = ?",
             (new_pid, mid, season, week, pid))
+        _log_decision(con, mid, season, week, "repick", pid, new_pid,
+                      edge, gated)
         seen.discard(pid)
         seen.add(new_pid)
         edited.append(f"{s['name']} -> {new_name}")
@@ -515,8 +579,8 @@ def run_smart_subs(con, season: int, now_et: datetime = None) -> str:
                 continue
             rem_in = r["adj_pts"] * (1.0 - prog_in)
             edge = rem_in - rem_out
-            if edge >= SMART_SUB_MARGIN and (best is None
-                                             or edge > best[0]):
+            if edge >= margin and (best is None
+                                   or edge > best[0]):
                 best = (edge, s, r, label)
     if best is None:
         return f"smart subs week {week}: no move{edit_note}"
@@ -538,7 +602,129 @@ def run_smart_subs(con, season: int, now_et: datetime = None) -> str:
         "VALUES (?,?,?,'applied',?,?,?,?)",
         (mid, season, week, out_stint["player_id"], in_row["player_id"],
          f"cpu-smart edge {edge:.1f}", _db.utcnow_iso()))
+    _log_decision(con, mid, season, week, "sub",
+                  out_stint["player_id"], in_row["player_id"], edge, True)
     con.commit()
     msg = (f"smart subs week {week}: {out_stint['name']} -> "
            f"{in_row['name']} (edge {edge:.1f})")
     return msg + edit_note
+
+
+# ---- CPU Smart learning loop (Week 8) -------------------------------
+# The margin is no longer just a constant: every gated decision (live
+# subs + advantage re-picks; forced inactive/bye moves excluded) is
+# recorded in smart_decisions with its predicted edge, and once its
+# week closes the actual net is settled. After each closed week the
+# margin auto-tunes from the cumulative settled gated record:
+#   delta = LEARN_RATE * (mean predicted edge - mean actual net),
+#   clamped to +/-MAX_STEP per week and to the [FLOOR, CEIL] band.
+# Overpromising (edges bigger than nets) raises the margin — Smart
+# demands more evidence before acting. Underpromising lowers it.
+# Tuning needs MIN_CALLS settled gated decisions, so early weeks only
+# collect evidence. Settled once: later stat corrections do not
+# re-tune history. The pass is idempotent (settled rows are skipped,
+# tuning converges), so it can run every poller cycle.
+
+def _tune_margin(old, edges, nets):
+    """(new_margin, info) from the cumulative gated record. Pure."""
+    n = len(edges)
+    if n < MIN_CALLS:
+        return old, f"{n}/{MIN_CALLS} judged calls"
+    avg_edge = sum(edges) / n
+    avg_net = sum(nets) / n
+    delta = LEARN_RATE * (avg_edge - avg_net)
+    delta = max(-MAX_STEP, min(MAX_STEP, delta))
+    new = max(MARGIN_FLOOR, min(MARGIN_CEIL, round(old + delta, 2)))
+    info = (f"{n} judged calls, avg edge {avg_edge:.2f}, "
+            f"avg net {avg_net:.2f}")
+    return new, info
+
+
+def learning_summary(con, season: int):
+    """Admin display for the learning loop; None when the ledger
+    predates this deploy. Never raises."""
+    try:
+        _ensure_decisions(con)
+        margin = get_smart_margin(con)
+        recs = con.execute(
+            "SELECT week, kind, edge, net FROM smart_decisions "
+            "WHERE season = ? AND gated = 1 AND settled = 1 "
+            "ORDER BY id", (season,)).fetchall()
+        judged = len(recs)
+        avg_edge = (round(sum(r["edge"] for r in recs) / judged, 2)
+                    if judged else None)
+        avg_net = (round(sum(r["net"] for r in recs) / judged, 2)
+                   if judged else None)
+        recent = [{"week": r["week"], "kind": r["kind"],
+                   "edge": r["edge"], "net": r["net"]}
+                  for r in recs[-5:]]
+        return {"margin": margin, "judged": judged,
+                "avg_edge": avg_edge, "avg_net": avg_net,
+                "recent": recent}
+    except Exception:
+        return None
+
+
+def run_smart_learning(con, season: int, now_et: datetime = None) -> str:
+    """Settle just-closed weeks' Smart decisions, then auto-tune the
+    margin. Staging only; safe no-op otherwise. Never breaks the poll."""
+    if not _staging_db():
+        return "smart learning skipped: not the staging database"
+    now_et = now_et or datetime.now(ET)
+    week = _db.current_pick_week(con, season)
+    mid = _smart_id(con)
+    if mid is None:
+        return "smart learning skipped: no CPU Smart member"
+    _ensure_decisions(con)
+    # Settle every unsettled decision from a closed week. Sub nets
+    # come from the graded sub outcomes; re-pick nets are full-week
+    # points gained vs standing pat. A bad row never blocks the rest.
+    settled = 0
+    for d in con.execute(
+            "SELECT * FROM smart_decisions WHERE member_id = ? "
+            "AND season = ? AND settled = 0 AND week < ?",
+            (mid, season, week)).fetchall():
+        try:
+            net = None
+            if d["kind"] == "sub":
+                for o in _scoring.sub_outcomes(con, mid, season,
+                                               d["week"]):
+                    if (o["out_player_id"] == d["out_player_id"]
+                            and o["in_player_id"] == d["in_player_id"]):
+                        net = o["net"]
+                        break
+            else:
+                out_pts, _ = _scoring.player_week_points(
+                    con, d["out_player_id"], season, d["week"])
+                in_pts, _ = _scoring.player_week_points(
+                    con, d["in_player_id"], season, d["week"])
+                net = round(in_pts - out_pts, 2)
+            if net is None:
+                continue
+            con.execute(
+                "UPDATE smart_decisions SET net = ?, settled = 1, "
+                "settled_at = ? WHERE id = ?",
+                (net, _db.utcnow_iso(), d["id"]))
+            settled += 1
+        except Exception:
+            continue
+    if settled:
+        con.commit()
+    # Tune from the cumulative settled gated record.
+    old = get_smart_margin(con)
+    recs = con.execute(
+        "SELECT edge, net FROM smart_decisions WHERE member_id = ? "
+        "AND season = ? AND gated = 1 AND settled = 1",
+        (mid, season)).fetchall()
+    if len(recs) >= MIN_CALLS:
+        new, info = _tune_margin(old, [r["edge"] for r in recs],
+                                 [r["net"] for r in recs])
+        if new != old:
+            _set_smart_margin(con, new)
+            note = f"; margin {old:.2f} -> {new:.2f} ({info})"
+        else:
+            note = f"; margin holds at {old:.2f} ({info})"
+    else:
+        note = (f"; collecting evidence "
+                f"({len(recs)}/{MIN_CALLS} judged calls)")
+    return f"smart learning: settled {settled} decisions{note}"

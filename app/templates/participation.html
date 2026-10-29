@@ -39,4 +39,12 @@
 </table>
 <p class="note">Net = what the replacement earned after entering minus what the subbed-out player scored after the sub moment — positive means the sub gained points. Flow counts (opened / confirm / completed / blocked) are tracked from Oct 23; completed subs are counted for the whole week.</p>
 {% endif %}
+{% if smart_learning %}
+<h3>CPU Smart learning</h3>
+<p>Current margin: <strong>{{ "%.2f"|format(smart_learning.margin) }}</strong> · Judged calls: <strong>{{ smart_learning.judged }}</strong>{% if smart_learning.avg_edge is not none %} · Avg predicted edge: {{ "%.2f"|format(smart_learning.avg_edge) }} · Avg actual net: {{ "%+.2f"|format(smart_learning.avg_net) }}{% endif %}</p>
+{% if smart_learning.recent %}
+<p>{% for d in smart_learning.recent %}Week {{ d.week }} {{ d.kind }}: edge {{ "%.1f"|format(d.edge) }} → net {{ "%+.1f"|format(d.net) }}<br>{% endfor %}</p>
+{% endif %}
+<p class="note">After each week closes, Smart settles that week's decisions (predicted edge vs actual net) and nudges its margin: overpromising raises it, underpromising lowers it, capped at 0.25 per week inside a 0.5–2.0 band. Tuning starts after 6 judged calls. Forced inactive/bye moves don't count as judgments.</p>
+{% endif %}
 {% endblock %}
