@@ -284,6 +284,18 @@ def main(check: bool = False):
         except Exception as exc:
             print(f"member auto-picks skipped: {exc}")
 
+    # ---- CPU Smart live subs (Week 8) ----
+    # Smart manages its lineup like a member: pre-kickoff inactive swaps
+    # (free) and live subs when the projected-remaining edge clears 1.0.
+    # Staging only, Smart only; CPU Random untouched. Never breaks the
+    # poll: at most one sub per cycle, and any failure just logs.
+    if not check:
+        try:
+            from app import cpu_picks as _cpu
+            print(_cpu.run_smart_subs(con, season, datetime.now(ET)))
+        except Exception as exc:
+            print(f"smart subs skipped: {exc}")
+
     # ---- Tank01 trial: live box-score snapshots (one-night MNF trial) ----
     # Rides the 15-min timer; safe no-op without TANK01_API_KEY or outside
     # the trial window. Stores raw payloads for post-game freshness compare.

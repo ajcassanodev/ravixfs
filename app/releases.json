@@ -1,5 +1,15 @@
 [
  {
+  "date": "2026-10-29",
+  "version": "2026-10-29.1",
+  "title": "CPU Smart manages its own lineup",
+  "notes": [
+   "CPU Smart now makes its own substitution decisions in real games: while a game is live it compares each picked player's projected remaining points with the best same-window replacement and swaps when the replacement leads by a full point or more",
+   "Same member rules: 2 subs a week, same kickoff window, both games live, no re-entry, and the benched player keeps banked points — Smart's swaps show up in the ticker, window recaps, and the admin Live substitutions section just like yours",
+   "Before kickoff, a Smart pick confirmed inactive gets a free edit to the best same-window player instead of burning a sub; CPU Random is untouched"
+  ]
+ },
+ {
   "date": "2026-10-25",
   "version": "2026-10-25.6",
   "title": "Published reports now get correction blocks",

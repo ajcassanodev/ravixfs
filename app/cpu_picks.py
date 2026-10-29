@@ -19,12 +19,14 @@ this can never create members or picks in the production database.
 """
 
 import os
+import json
 import random
 import secrets
-from datetime import datetime, time as dtime, timezone
+from datetime import datetime, time as dtime, timezone, timedelta
 from zoneinfo import ZoneInfo
 
 from . import db as _db
+from . import gamestate as _gamestate
 from . import matchup as _matchup
 from . import scoring as _scoring
 
@@ -279,3 +281,222 @@ def run_member_auto_picks(con, season: int, now_et: datetime = None) -> str:
         con.commit()
     return (f"member auto-picks week {week} ({method}): "
             + (", ".join(filled) or "nothing open"))
+
+
+# ---- CPU Smart live subs (Week 8) ------------------------------------
+# Staging only. Smart manages its lineup like a member, so we can watch
+# what it does in real games before bonus picks arrive in Week 10:
+#
+#   - Pre-kickoff: a Smart pick confirmed inactive (non-ACT status)
+#     before its game starts gets a free edit to the top-Adj player
+#     from the same kickoff window. This costs no sub.
+#   - Live: every poller cycle, each live Smart pick's projected
+#     REMAINING points (Adj x share of game left) is compared with the
+#     best same-window replacement's projected remaining. Smart subs
+#     only when the replacement leads by SMART_SUB_MARGIN (1.0) or
+#     more, so it never churns subs on noise. Banked points stay either
+#     way, so only the future matters.
+#
+# Member rules are mirrored exactly: 2 subs per week, same kickoff
+# window (exact kickoff equality, as the member rule enforces), both
+# games live, no re-entry (a subbed-out player can never return), and
+# the sub is written through the same weekly_subs rows members use —
+# so ticker SUB items, window recaps, and the admin Live substitutions
+# section all pick Smart's subs up automatically. At most one sub per
+# poller cycle (the largest edge); the next cycle reconsiders.
+# CPU Random is untouched.
+
+SMART_SUB_MARGIN = 1.0
+_GAME_LEN_HOURS = 3.25
+
+
+def _game_live(con, team, pid, season, week, states):
+    """(is_live, clock_label) for a player's game right now.
+
+    Mirrors main._sub_game_live without importing the web app: ESPN
+    state wins when the feed has the game, else the kickoff window
+    (started, less than 4 hours ago)."""
+    game = _gamestate.player_game(team, states) if states else None
+    if game is not None:
+        if game["state"] == "in":
+            return True, _gamestate.live_label(game)
+        return False, None
+    ko = _db.player_kickoff(con, pid, season, week)
+    kdt = _parse_ko(ko)
+    if kdt is None:
+        return False, None
+    now = datetime.now(timezone.utc)
+    return (kdt <= now < kdt + timedelta(hours=4)), None
+
+
+def _game_progress(team, states, kickoff_utc, now_utc):
+    """Share of the game elapsed (0..1), or None if not started.
+
+    ESPN period/clock when the feed has the game (halftime = 0.5,
+    overtime = 1.0); otherwise elapsed time since kickoff over a
+    typical 3.25-hour game."""
+    game = _gamestate.player_game(team, states) if states else None
+    if game is not None and game["state"] == "in":
+        detail = (game.get("detail") or "").lower()
+        if "halftime" in detail:
+            return 0.5
+        period = game.get("period", 0) or 0
+        if period > 4:
+            return 1.0
+        clock = game.get("clock", "") or ""
+        try:
+            mins, secs = clock.split(":")
+            remaining = int(mins) * 60 + int(secs)
+            elapsed = (period - 1) * 900 + (900 - remaining)
+            return max(0.0, min(1.0, elapsed / 3600.0))
+        except Exception:
+            pass
+    kdt = _parse_ko(kickoff_utc)
+    if kdt is None or now_utc < kdt:
+        return None
+    hours = (now_utc - kdt).total_seconds() / 3600.0
+    return max(0.0, min(1.0, hours / _GAME_LEN_HOURS))
+
+
+def run_smart_subs(con, season: int, now_et: datetime = None) -> str:
+    """CPU Smart's sub decisions for the current week, staging only."""
+    if not _staging_db():
+        return "smart subs skipped: not the staging database"
+    now_et = now_et or datetime.now(ET)
+    now_utc = now_et.astimezone(timezone.utc)
+    week = _db.current_pick_week(con, season)
+    row = con.execute(
+        "SELECT id FROM members WHERE name = 'CPU Smart'").fetchone()
+    if not row:
+        return "smart subs skipped: no CPU Smart member"
+    mid = row["id"]
+    rows = _scoring.projections(con, season, week - 1)
+    _matchup.annotate_rows(con, season, week, week - 1, rows,
+                           _scoring.scoring_map(con))
+    ko_by_pid = {}
+    for r in rows:
+        ko_by_pid[r["player_id"]] = _db.player_kickoff(
+            con, r["player_id"], season, week)
+
+    def _ko(pid):
+        if pid in ko_by_pid:
+            return ko_by_pid[pid]
+        return _db.player_kickoff(con, pid, season, week)
+
+    # ---- Pre-kickoff: free edit for confirmed-inactive picks ----
+    stints = _scoring.member_week_stints(con, mid, season, week)
+    seen = {s["player_id"] for s in stints}
+    edited = []
+    for s in stints:
+        if not s["active"]:
+            continue
+        pid = s["player_id"]
+        ko = _ko(pid)
+        kdt = _parse_ko(ko)
+        if kdt is None or kdt <= now_utc:
+            continue
+        prow = con.execute(
+            "SELECT status FROM players WHERE player_id = ?",
+            (pid,)).fetchone()
+        status = (prow["status"] if prow else "") or ""
+        if not status or status.upper() == "ACT":
+            continue
+        cands = [r for r in rows
+                 if r["player_id"] not in seen
+                 and r.get("opponent")
+                 and (r["status"] or "").upper() == "ACT"
+                 and ko_by_pid.get(r["player_id"]) == ko]
+        if not cands:
+            continue
+        cands.sort(key=lambda r: (-r["adj_pts"], -r["proj_pts"], r["name"]))
+        new_pid = cands[0]["player_id"]
+        con.execute(
+            "UPDATE weekly_picks SET player_id = ? "
+            "WHERE member_id = ? AND season = ? AND week = ? "
+            "AND player_id = ?",
+            (new_pid, mid, season, week, pid))
+        seen.discard(pid)
+        seen.add(new_pid)
+        edited.append(f"{s['name']} -> {cands[0]['name']}")
+    if edited:
+        con.commit()
+    edit_note = (f" (pre-kickoff edits: {', '.join(edited)})"
+                 if edited else "")
+
+    # ---- Live: at most one sub per cycle, the largest edge ----
+    subs = _scoring.week_subs(con, mid, season, week)
+    if len(subs) >= _scoring.MAX_SUBS:
+        return f"smart subs week {week}: subs used up{edit_note}"
+    stints = _scoring.member_week_stints(con, mid, season, week)
+    seen = {s["player_id"] for s in stints}
+    live_stints = []
+    for s in stints:
+        if not s["active"]:
+            continue
+        ko = _ko(s["player_id"])
+        kdt = _parse_ko(ko)
+        if kdt is None or not (kdt <= now_utc < kdt + timedelta(hours=4)):
+            continue
+        live_stints.append((s, ko))
+    if not live_stints:
+        return f"smart subs week {week}: no live games{edit_note}"
+    states = _gamestate.fetch_states(week)
+    adj = {r["player_id"]: r for r in rows}
+    best = None
+    for s, ko in live_stints:
+        live_out, label = _game_live(con, s["team"], s["player_id"],
+                                     season, week, states)
+        if not live_out:
+            continue
+        out_row = adj.get(s["player_id"])
+        if out_row is None:
+            continue
+        prog_out = _game_progress(s["team"], states, ko, now_utc)
+        if prog_out is None:
+            continue
+        rem_out = out_row["adj_pts"] * (1.0 - prog_out)
+        for r in rows:
+            if r["player_id"] in seen:
+                continue
+            if not r.get("opponent"):
+                continue
+            if (r["status"] or "").upper() != "ACT":
+                continue
+            if ko_by_pid.get(r["player_id"]) != ko:
+                continue
+            live_in, _ = _game_live(con, r["team"], r["player_id"],
+                                    season, week, states)
+            if not live_in:
+                continue
+            prog_in = _game_progress(r["team"], states, ko, now_utc)
+            if prog_in is None:
+                continue
+            rem_in = r["adj_pts"] * (1.0 - prog_in)
+            edge = rem_in - rem_out
+            if edge >= SMART_SUB_MARGIN and (best is None
+                                             or edge > best[0]):
+                best = (edge, s, r, label)
+    if best is None:
+        return f"smart subs week {week}: no move{edit_note}"
+    edge, out_stint, in_row, label = best
+    _, out_stats = _scoring.player_week_points(
+        con, out_stint["player_id"], season, week)
+    _, in_stats = _scoring.player_week_points(
+        con, in_row["player_id"], season, week)
+    con.execute(
+        "INSERT INTO weekly_subs (member_id, season, week, out_player_id, "
+        "in_player_id, subbed_at, game_label, out_stats, in_stats) "
+        "VALUES (?,?,?,?,?,?,?,?,?)",
+        (mid, season, week, out_stint["player_id"], in_row["player_id"],
+         _db.utcnow_iso(), label, json.dumps(out_stats),
+         json.dumps(in_stats)))
+    con.execute(
+        "INSERT INTO sub_events (member_id, season, week, event, "
+        "out_player_id, in_player_id, detail, created_at) "
+        "VALUES (?,?,?,'applied',?,?,?,?)",
+        (mid, season, week, out_stint["player_id"], in_row["player_id"],
+         f"cpu-smart edge {edge:.1f}", _db.utcnow_iso()))
+    con.commit()
+    msg = (f"smart subs week {week}: {out_stint['name']} -> "
+           f"{in_row['name']} (edge {edge:.1f})")
+    return msg + edit_note
