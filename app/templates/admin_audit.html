@@ -2,6 +2,7 @@
 {% block title %}Admin · Audit log{% endblock %}
 {% block content %}
 <h2>Admin · Audit log</h2>
+<p class="note"><a href="/admin/{{ token }}">Admin console</a> · <a href="/admin/{{ token }}/participation">Participation</a> · <a href="/admin/{{ token }}/news">League News</a></p>
 <p class="note">Every recorded event, newest first. Filter by week, kind, or member.</p>
 <form method="get" action="/admin/{{ token }}/audit" class="audit-filter">
   <label>Week

@@ -1,6 +1,15 @@
 [
  {
   "date": "2026-10-30",
+  "version": "2026-10-30.2",
+  "title": "Admin console links to the audit log",
+  "notes": [
+   "The Admin console now links to the Audit log alongside Participation and League News, so the audit view is one click away instead of a typed URL",
+   "The audit page itself links back to the Admin console, Participation, and League News"
+  ]
+ },
+ {
+  "date": "2026-10-30",
   "version": "2026-10-30.1",
   "title": "Unified audit system: every point movement has a cause",
   "notes": [
