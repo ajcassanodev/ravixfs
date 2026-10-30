@@ -1,6 +1,17 @@
 [
  {
   "date": "2026-10-30",
+  "version": "2026-10-30.4",
+  "title": "Weekly audit digest: every week's audit log, emailed to the Ravix inbox",
+  "notes": [
+   "Every Tuesday 9:00-9:15 AM ET, the poller emails info@ravixfs.com a digest of the just-closed week's audit events — one email per week, never twice",
+   "Counts by kind for everything, with full lines for corrections, feed switches, subs, re-picks, and admin actions; high-volume stat observations and pick locks appear as counts only",
+   "Tripwire verdict included: clean, flagged count, or not yet armed",
+   "First send: Tuesday Nov 3 for Week 8 (the audit log starts Oct 30, so Week 8 covers Oct 30 onward only)"
+  ]
+ },
+ {
+  "date": "2026-10-30",
   "version": "2026-10-30.3",
   "title": "Admin dashboard: the console becomes a live dashboard",
   "notes": [

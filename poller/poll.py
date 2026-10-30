@@ -323,6 +323,20 @@ def main(check: bool = False):
             # Reminders must never break the stats poll.
             print(f"email reminders skipped: {exc}")
 
+    # ---- Tuesday-morning weekly audit digest ----
+    # One email per closed week to info@ravixfs.com, inside the
+    # 9:00-9:15 AM ET Tuesday window, deduped by audit_report_sends.
+    # Same safe no-op pattern as the reminders. Never breaks the poll.
+    if not check:
+        try:
+            sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+            from app import audit_report as _ar
+            now_et = datetime.now(ET)
+            if _ar.tuesday_report_due(now_et):
+                print(_ar.run_weekly_report(con, season, now_et))
+        except Exception as exc:
+            print(f"weekly audit report skipped: {exc}")
+
     # ---- CPU auto-pick test members (staging only) ----
     # CPU Random vs CPU Smart: fills their weekly picks Thursdays from
     # 9 AM ET until first kickoff. The module gates on the staging DB
