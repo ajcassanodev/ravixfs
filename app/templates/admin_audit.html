@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Admin · Audit log{% endblock %}
+{% block content %}
+<h2>Admin · Audit log</h2>
+<p class="note">Every recorded event, newest first. Filter by week, kind, or member.</p>
+<form method="get" action="/admin/{{ token }}/audit" class="audit-filter">
+  <label>Week
+    <select name="week">
+      <option value="0" {% if not week %}selected{% endif %}>All weeks</option>
+      {% for w in weeks %}<option value="{{ w }}" {% if week == w %}selected{% endif %}>Week {{ w }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Kind
+    <select name="kind">
+      <option value="" {% if not kind %}selected{% endif %}>All kinds</option>
+      {% for k in kinds %}<option value="{{ k }}" {% if kind == k %}selected{% endif %}>{{ k }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Member
+    <select name="member">
+      <option value="0" {% if not member %}selected{% endif %}>All members</option>
+      {% for m in members %}<option value="{{ m.id }}" {% if member == m.id %}selected{% endif %}>{{ m.name }}</option>{% endfor %}
+    </select>
+  </label>
+  <button type="submit">Filter</button>
+</form>
+{% if tripwire_started %}
+<div class="dash-card">
+  <div class="dash-cardt">TRIPWIRE — SCORE WRITES WITH NO AUDIT CAUSE</div>
+  {% if orphans %}
+  <p class="note">These score writes happened after the audit log began but have no audit row. Investigate before trusting them.</p>
+  {% for o in orphans %}
+  <div class="audit-row">
+    <span class="audit-when">{{ o.when }}</span>
+    <span class="audit-week">W{{ o.week }}</span>
+    <span class="audit-src">{{ o.source }}</span>
+    <span class="audit-text">{{ o.player }}{% if o.member %} · {{ o.member }}{% endif %} · {{ o.stat }}</span>
+  </div>
+  {% endfor %}
+  {% else %}
+  <p class="note">Clean — every score write since the audit log began has a recorded cause.</p>
+  {% endif %}
+</div>
+{% else %}
+<p class="note">Tripwire not yet armed: the audit log has no rows yet, so there is nothing to check against.</p>
+{% endif %}
+{% for e in events %}
+<div class="audit-row">
+  <span class="audit-when">{{ e.when }}</span>
+  <span class="audit-week">W{{ e.week }}</span>
+  <span class="audit-member">{{ e.member }}</span>
+  <span class="audit-text">{{ e.text }}</span>
+  <span class="audit-tag audit-{{ e.tag|lower }}">{{ e.tag }}</span>
+  {% if e.points != '0.0' %}<span class="audit-pts">{{ e.points }}</span>{% endif %}
+  <span class="audit-feed">{{ e.feed }}</span>
+</div>
+{% else %}
+<p class="note">No audit events yet.</p>
+{% endfor %}
+{% endblock %}

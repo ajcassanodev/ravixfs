@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Pick history{% endblock %}
+{% block content %}
+<h2>Pick history</h2>
+<p class="note">{{ member_name }} · every week, every pick, with lock receipts and sub history inline.</p>
+{% for w in weeks %}
+<div class="dash-card">
+  <div class="dash-cardt">WEEK {{ w.week }}</div>
+  {% for p in w.picks %}
+  <div class="hist-row">
+    <span class="hist-player">{{ p.name }}</span>
+    <span class="dash-team">{{ p.team }}</span>
+    <span class="hist-src">{{ p.source }}</span>
+    <span class="hist-when">Picked {{ p.picked }}</span>
+    <span class="hist-when">Locked {{ p.locked }}</span>
+    {% if p.sub %}<span class="hist-sub">{{ p.sub }}</span>{% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<p class="note">No picks on record yet.</p>
+{% endfor %}
+<p class="note"><a href="/dashboard">Back to dashboard</a></p>
+{% endblock %}

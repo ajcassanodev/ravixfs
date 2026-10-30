@@ -17,6 +17,7 @@ from . import sms as _sms
 from . import emailer as _emailer
 from . import matchup
 from . import cpu_picks as _cpu
+from . import audit as _audit
 from shared import identity as _identity
 
 ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "")
@@ -926,6 +927,74 @@ def _scoring_summary(con, mid, season, week, limit=12):
     return out[:limit]
 
 
+def _session_member(con, request):
+    """members row for the pick-link session, or None."""
+    token = _request_pick_token(request)
+    if not token:
+        return None
+    return con.execute(
+        "SELECT * FROM members WHERE pick_token = ?", (token,)).fetchone()
+
+
+def _why_changed(con, mid, season, week, limit=30):
+    """The member's own audit trail for a week, newest first.
+
+    Two precise sources, one list: the member's own pick/sub events
+    (member_id = mid) plus stat events for the players in the member's
+    stints, kept only when the movement falls inside the stint window
+    (same rule as the scoring summary, so a subbed-out player's later
+    plays and a replacement's pre-entry plays never appear). Stat
+    events are league-wide rows (member_id NULL); the stint filter is
+    what makes them "mine".
+    """
+    try:
+        stints = scoring.member_week_stints(con, mid, season, week)
+    except Exception:
+        return []
+    by_pid = {s["player_id"]: s for s in stints}
+    try:
+        names = {r["player_id"]: r["name"] for r in con.execute(
+            "SELECT player_id, name FROM players")}
+    except Exception:
+        names = {}
+    try:
+        own = con.execute(
+            "SELECT * FROM audit_events WHERE season = ? AND week = ? "
+            "AND member_id = ? ORDER BY created_at DESC, id DESC",
+            (season, week, mid)).fetchall()
+        stat_rows = []
+        if by_pid:
+            ph = ",".join("?" * len(by_pid))
+            stat_rows = con.execute(
+                "SELECT * FROM audit_events WHERE season = ? AND week = ? "
+                "AND member_id IS NULL "
+                "AND kind IN ('stat_observed','stat_corrected','feed_switched') "
+                f"AND player_id IN ({ph}) ORDER BY created_at DESC, id DESC",
+                (season, week, *by_pid.keys())).fetchall()
+    except Exception:
+        return []  # audit_events predates this deploy
+    lines = []
+    for r in list(own) + list(stat_rows):
+        d = dict(r)
+        if d["kind"] in _audit.STAT_KINDS:
+            st = by_pid.get(d["player_id"])
+            if st is None:
+                continue
+            if d["stat_key"] and d["new_value"] is not None:
+                if not scoring.stint_counts_event(
+                        st, d["stat_key"], d["new_value"]):
+                    continue
+        f = _audit.format_event(d, names)
+        lines.append({"when": _et_event_label(d["created_at"]),
+                      "text": f["text"], "points": f["points"],
+                      "tag": f["tag"],
+                      "sort": d["created_at"]})
+    lines.sort(key=lambda e: e["sort"], reverse=True)
+    for e in lines:
+        e.pop("sort", None)
+    return lines[:limit]
+
+
 def _dashboard_context(con, request):
     """Dashboard context for a signed-in member, or None.
 
@@ -990,6 +1059,12 @@ def _dashboard_context(con, request):
     states = _gamestate.fetch_states(pick_week)
     now = datetime.now(timezone.utc)
     picks, next_lock = [], None
+    try:
+        _names = {r["player_id"]: r["name"] for r in con.execute(
+            "SELECT player_id, name FROM players")}
+    except Exception:
+        _names = {}
+    receipts = []
     for st in stints:
         pid, pname, pteam = st["player_id"], st["name"], st["team"]
         pts = st["points"]
@@ -1018,6 +1093,38 @@ def _dashboard_context(con, request):
             "can_sub": bool(st["active"] and status == "live"
                             and subs_left > 0),
         })
+        # Lock receipt for this row (popup data): picked-at, locked-at,
+        # source, and sub history. Sub-ins entered via sub, not via pick.
+        if st["source"] == "sub" and st["opened_by"] is not None:
+            op = st["opened_by"]
+            receipts.append({
+                "name": pname, "team": pteam,
+                "picked": _et_stamp(op["subbed_at"]),
+                "locked": "Entered via sub",
+                "source": "Sub",
+                "sub": f"Subbed in {op['game_label'] or ''} for "
+                       f"{_names.get(op['out_player_id'], op['out_player_id'])}",
+            })
+        else:
+            wp = con.execute(
+                "SELECT submitted_at, source FROM weekly_picks "
+                "WHERE member_id = ? AND season = ? AND week = ? "
+                "AND player_id = ?",
+                (mid, season, pick_week, pid)).fetchone()
+            ko2 = _db.player_kickoff(con, pid, season, pick_week)
+            sub_txt = None
+            if st["sub"] is not None:
+                srow = st["sub"]
+                sub_txt = (f"Subbed out {srow['game_label'] or ''} for "
+                           f"{_names.get(srow['in_player_id'], srow['in_player_id'])}, "
+                           f"banked {pts:.1f}")
+            receipts.append({
+                "name": pname, "team": pteam,
+                "picked": _et_stamp(wp["submitted_at"]) if wp else "—",
+                "locked": _et_kickoff_label(ko2) if ko2 else "Bye (no game)",
+                "source": "AUTO" if (wp and wp["source"] == "auto") else "You",
+                "sub": sub_txt,
+            })
         ko = _db.player_kickoff(con, pid, season, pick_week)
         if ko:
             kdt = datetime.fromisoformat(ko)
@@ -1092,6 +1199,8 @@ def _dashboard_context(con, request):
         "top5": top5, "trend": trend,
         "subs_left": subs_left, "subs": subs_hist,
         "summary": _scoring_summary(con, mid, season, pick_week),
+        "why_changed": _why_changed(con, mid, season, pick_week),
+        "receipts": receipts,
         "next_lock": next_lock[1] if next_lock else None,
         "ticker": _ticker_data(
             con, season,
@@ -1137,6 +1246,7 @@ def dashboard_json(request: Request):
         "top5": ctx["top5"],
         "trend": ctx["trend"],
         "summary": ctx["summary"],
+        "why_changed": ctx["why_changed"],
         "next_lock": ctx["next_lock"],
     })
 
@@ -1386,6 +1496,213 @@ def releases_page(request: Request):
     })
 
 
+# ---------------- audit surfaces (2026-10-30) ----------------
+# All read from audit_events; none of them write scores.
+
+@app.get("/history", response_class=HTMLResponse)
+def pick_history(request: Request):
+    """The member's pick history: every week, every pick, with lock
+    receipts and sub history inline."""
+    con = _db.connect()
+    m = _session_member(con, request)
+    if m is None:
+        con.close()
+        return RedirectResponse("/", status_code=303)
+    season = _db.current_season(con)
+    pick_week = _db.current_pick_week(con, season)
+    try:
+        players = {r["player_id"]: r for r in con.execute(
+            "SELECT player_id, name, team FROM players")}
+    except Exception:
+        players = {}
+    weeks = []
+    for w in range(pick_week, 0, -1):
+        rows = con.execute(
+            "SELECT wp.player_id, wp.submitted_at, wp.source, p.name, p.team "
+            "FROM weekly_picks wp JOIN players p ON p.player_id = wp.player_id "
+            "WHERE wp.member_id = ? AND wp.season = ? AND wp.week = ?",
+            (m["id"], season, w)).fetchall()
+        if not rows:
+            continue
+        subs = scoring.week_subs(con, m["id"], season, w)
+        sub_out = {s["out_player_id"]: s for s in subs}
+        sub_in = {s["in_player_id"]: s for s in subs}
+        picks = []
+        for r in rows:
+            ko = _db.player_kickoff(con, r["player_id"], season, w)
+            sub_txt = None
+            s = sub_out.get(r["player_id"])
+            if s is not None:
+                prow = players.get(s["in_player_id"])
+                sub_txt = (f"Subbed out {s['game_label'] or ''} for "
+                           f"{prow['name'] if prow else s['in_player_id']}")
+            picks.append({
+                "name": r["name"], "team": r["team"],
+                "picked": _et_stamp(r["submitted_at"]),
+                "locked": _et_kickoff_label(ko) if ko else "Bye (no game)",
+                "source": "AUTO" if r["source"] == "auto" else "You",
+                "sub": sub_txt})
+        for pid, s in sub_in.items():
+            prow = players.get(pid)
+            orow = players.get(s["out_player_id"])
+            picks.append({
+                "name": prow["name"] if prow else pid,
+                "team": prow["team"] if prow else "",
+                "picked": _et_stamp(s["subbed_at"]),
+                "locked": "Entered via sub", "source": "Sub",
+                "sub": f"Subbed in {s['game_label'] or ''} for "
+                       f"{orow['name'] if orow else s['out_player_id']}"})
+        weeks.append({"week": w, "picks": picks})
+    con.close()
+    return templates.TemplateResponse(request, "history.html", {
+        "request": request, "member_name": m["name"], "season": season,
+        "weeks": weeks})
+
+
+@app.get("/corrections", response_class=HTMLResponse)
+def corrections_feed(request: Request):
+    """Every correction that moved a scored total, newest first.
+
+    Reads the unified log (from deploy forward; older corrections live
+    in their News posts). A YOUR PICKS badge marks corrections to the
+    viewer's lineup for that week. Tackle corrections appear here even
+    though they never hit the ticker.
+    """
+    con = _db.connect()
+    m = _session_member(con, request)
+    if m is None:
+        con.close()
+        return RedirectResponse("/", status_code=303)
+    season = _db.current_season(con)
+    try:
+        players = {r["player_id"]: r for r in con.execute(
+            "SELECT player_id, name, team FROM players")}
+    except Exception:
+        players = {}
+    names = {pid: r["name"] for pid, r in players.items()}
+    try:
+        rows = con.execute(
+            "SELECT * FROM audit_events WHERE kind = 'stat_corrected' "
+            "ORDER BY created_at DESC, id DESC LIMIT 100").fetchall()
+    except Exception:
+        rows = []  # audit_events predates this deploy
+    lineups = {}
+    for r in rows:
+        w = r["week"]
+        if w not in lineups:
+            pids = {x["player_id"] for x in con.execute(
+                "SELECT player_id FROM weekly_picks WHERE member_id = ? "
+                "AND season = ? AND week = ?",
+                (m["id"], season, w))}
+            pids |= {x["in_player_id"] for x in con.execute(
+                "SELECT in_player_id FROM weekly_subs WHERE member_id = ? "
+                "AND season = ? AND week = ?",
+                (m["id"], season, w))}
+            lineups[w] = pids
+    items = []
+    for r in rows:
+        d = dict(r)
+        f = _audit.format_event(d, names)
+        prow = players.get(d["player_id"])
+        items.append({
+            "when": _et_stamp(d["created_at"]),
+            "week": d["week"], "text": f["text"], "points": f["points"],
+            "mine": d["player_id"] in lineups.get(d["week"], set()),
+            "name": prow["name"] if prow else (d["player_id"] or ""),
+            "team": prow["team"] if prow else "",
+        })
+    con.close()
+    return templates.TemplateResponse(request, "corrections.html", {
+        "request": request, "member_name": m["name"], "items": items})
+
+
+@app.get("/formula", response_class=HTMLResponse)
+def formula_page(request: Request):
+    """Scoring table, lock rules, corrections policy — the rulebook."""
+    con = _db.connect()
+    cfg = {r["stat_key"]: r["points"] for r in con.execute(
+        "SELECT * FROM scoring_config")}
+    con.close()
+    table = [{"stat": _audit.STAT_NOUNS.get(k, k), "key": k,
+              "points": cfg.get(k, 0)} for k in scoring.STAT_KEYS]
+    return templates.TemplateResponse(request, "formula.html", {
+        "request": request, "table": table})
+
+
+@app.get("/admin/{token}/audit", response_class=HTMLResponse)
+def admin_audit(request: Request, token: str, week: int = 0, kind: str = "",
+                member: int = 0):
+    """Admin audit view: the full log, filterable, plus the tripwire.
+
+    The tripwire surfaces score writes since the audit log began that
+    have no audit row — a write with no feed/pick/sub cause.
+    """
+    if not _admin_ok(token):
+        raise HTTPException(404, "not found")
+    con = _db.connect()
+    season = _db.current_season(con)
+    members = con.execute("SELECT id, name FROM members ORDER BY name").fetchall()
+    try:
+        weeks = [r["week"] for r in con.execute(
+            "SELECT DISTINCT week FROM audit_events WHERE season = ? ORDER BY week",
+            (season,))]
+        kinds = [r["kind"] for r in con.execute(
+            "SELECT DISTINCT kind FROM audit_events ORDER BY kind")]
+    except Exception:
+        weeks, kinds = [], []
+    q = "SELECT * FROM audit_events WHERE season = ?"
+    args: list = [season]
+    if week:
+        q += " AND week = ?"
+        args.append(week)
+    if kind:
+        q += " AND kind = ?"
+        args.append(kind)
+    if member:
+        q += " AND member_id = ?"
+        args.append(member)
+    q += " ORDER BY created_at DESC, id DESC LIMIT 200"
+    try:
+        rows = con.execute(q, args).fetchall()
+    except Exception:
+        rows = []
+    try:
+        names = {r["player_id"]: r["name"] for r in con.execute(
+            "SELECT player_id, name FROM players")}
+    except Exception:
+        names = {}
+    member_names = {mm["id"]: mm["name"] for mm in members}
+    events = []
+    for r in rows:
+        d = dict(r)
+        f = _audit.format_event(d, names)
+        events.append({
+            "when": _et_stamp(d["created_at"]), "week": d["week"],
+            "member": member_names.get(d["member_id"], "—")
+                      if d["member_id"] else "League",
+            "text": f["text"], "points": f["points"], "tag": f["tag"],
+            "feed": d["source_feed"] or "—",
+        })
+    started, orphans = _audit.tripwire_orphans(con)
+    orphan_rows = []
+    for o in orphans:
+        orphan_rows.append({
+            "source": o["source"], "when": _et_stamp(o["when"]),
+            "week": o["week"],
+            "player": names.get(o["player_id"], o["player_id"] or ""),
+            "member": member_names.get(o["member_id"], "")
+                      if o["member_id"] else "",
+            "stat": o["stat_key"] or "sub",
+        })
+    con.close()
+    return templates.TemplateResponse(request, "admin_audit.html", {
+        "request": request, "token": token, "season": season,
+        "members": members, "weeks": weeks, "kinds": kinds,
+        "week": week, "kind": kind, "member": member,
+        "events": events, "tripwire_started": started,
+        "orphans": orphan_rows})
+
+
 def _et_news_stamp(iso_ts) -> str:
     """'Thu Oct 22 · 11:50 PM ET' for a League News timestamp."""
     try:
@@ -1597,6 +1914,9 @@ def admin_news_create(token: str, headline: str = Form(""),
         "'Commissioner', ?)",
         (season, week, headline, body,
          datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")))
+    _audit.log(con, season, week, "admin_action", "news_post",
+               source_feed="admin", actor="admin",
+               detail={"action": "news_post", "headline": headline})
     con.commit()
     con.close()
     return RedirectResponse(f"/admin/{token}/news", status_code=303)
@@ -1618,6 +1938,9 @@ def admin_news_delete(token: str, post_id: int):
                 (row["season"], row["week"], row["window_key"]))
         con.execute("DELETE FROM news_comments WHERE post_id = ?", (post_id,))
         con.execute("DELETE FROM news_posts WHERE id = ?", (post_id,))
+        _audit.log(con, row["season"], row["week"], "admin_action",
+                   "news_delete", source_feed="admin", actor="admin",
+                   detail={"action": "news_delete", "post_id": post_id})
         con.commit()
     con.close()
     return RedirectResponse(f"/admin/{token}/news", status_code=303)
@@ -1917,11 +2240,23 @@ def sub_apply(token: str, out: str = Form(""), inn: str = Form("")):
         "VALUES (?,?,?,?,?,?,?,?,?)",
         (m["id"], season, week, out, inn, _db.utcnow_iso(), info["label"],
          json.dumps(info["out_stats"]), json.dumps(info["in_stats"])))
+    sub_id = con.execute("SELECT last_insert_rowid()").fetchone()[0]
     con.execute(
         "INSERT INTO sub_events (member_id, season, week, event, "
         "out_player_id, in_player_id, detail, created_at) "
         "VALUES (?,?,?,'applied',?,?,?,?)",
         (m["id"], season, week, out, inn, "", _db.utcnow_iso()))
+    # Audit: live sub pair, linked to the weekly_subs row.
+    _audit.log(con, season, week, "pick_subbed_out", "live_sub",
+               member_id=m["id"], player_id=out,
+               source_feed="member", actor=str(m["id"]),
+               detail={"sub_row": sub_id, "in_player_id": inn,
+                       "game_label": info["label"]})
+    _audit.log(con, season, week, "pick_subbed", "live_sub",
+               member_id=m["id"], player_id=inn,
+               source_feed="member", actor=str(m["id"]),
+               detail={"sub_row": sub_id, "out_player_id": out,
+                       "game_label": info["label"]})
     con.commit()
     con.close()
     return RedirectResponse("/dashboard?subbed=1", status_code=303)
@@ -1966,6 +2301,12 @@ def admin_add_member(token: str, name: str = Form(""), is_test: int = Form(0)):
         "INSERT INTO members (name, pick_token, is_test) VALUES (?,?,?)",
         (name, pt, 1 if is_test else 0),
     )
+    _season = _db.current_season(con)
+    _audit.log(con, _season, _db.current_pick_week(con, _season),
+               "admin_action", "member_add",
+               source_feed="admin", actor="admin",
+               detail={"action": "member_add", "name": name,
+                       "is_test": 1 if is_test else 0})
     con.commit()
     con.close()
     return RedirectResponse(f"/admin/{token}", status_code=303)
@@ -1979,6 +2320,14 @@ def admin_scoring(token: str, stat_key: str = Form(""), points: float = Form(0))
         raise HTTPException(400, "unknown stat")
     con = _db.connect()
     con.execute("UPDATE scoring_config SET points=? WHERE stat_key=?", (points, stat_key))
+    # Audit: scoring-table edits recalculate every past week (see
+    # scoring.py), so the change itself must be on the record.
+    _season = _db.current_season(con)
+    _audit.log(con, _season, _db.current_pick_week(con, _season),
+               "admin_action", "scoring_change",
+               source_feed="admin", actor="admin",
+               detail={"action": "scoring_change", "stat_key": stat_key,
+                       "points": points})
     con.commit()
     con.close()
     return RedirectResponse(f"/admin/{token}", status_code=303)
@@ -1992,7 +2341,13 @@ def admin_autopicks_method(token: str, method: str = Form("")):
         raise HTTPException(400, "unknown method")
     con = _db.connect()
     _cpu.set_auto_method(con, method)
-    con.close()
+    # set_auto_method commits internally; commit the audit row itself.
+    _season = _db.current_season(con)
+    _audit.log(con, _season, _db.current_pick_week(con, _season),
+               "admin_action", "method_switch",
+               source_feed="admin", actor="admin",
+               detail={"action": "method_switch", "method": method})
+    con.commit()
     return RedirectResponse(f"/admin/{token}", status_code=303)
 
 
@@ -2299,6 +2654,11 @@ def projections_pick(request: Request, token: str = Form(""),
         "INSERT INTO weekly_picks (member_id, player_id, season, week, submitted_at) "
         "VALUES (?,?,?,?,?)",
         (m["id"], prow["player_id"], season, week, _db.utcnow_iso()))
+    # Audit: member pick (best-effort; the pick itself already committed below).
+    _audit.log(con, season, week, "pick_submitted", "member_pick",
+               member_id=m["id"], player_id=prow["player_id"],
+               source_feed="member", actor=str(m["id"]),
+               detail={"source": "manual"})
     con.commit()
     con.close()
     return _proj_redirect(token, sort, dir, pos, q,
@@ -2334,6 +2694,12 @@ def projections_unpick(request: Request, token: str = Form(""),
     con.execute(
         "DELETE FROM weekly_picks WHERE member_id=? AND season=? AND week=? AND player_id=?",
         (m["id"], season, week, player_id))
+    # Audit: pre-kickoff removal. The app has no atomic edit endpoint,
+    # so a member "edit" is a remove + submit pair in this log.
+    _audit.log(con, season, week, "pick_removed", "member_unpick",
+               member_id=m["id"], player_id=player_id,
+               source_feed="member", actor=str(m["id"]),
+               detail={"name": row["name"]})
     con.commit()
     con.close()
     return _proj_redirect(token, sort, dir, pos, q,

@@ -403,3 +403,27 @@ a.upcoming{opacity:.75;font-style:italic}
   input,select,button{min-height:44px;font-size:1rem}
   .plink{padding:.35rem 0}
 }
+
+/* Audit surfaces (2026-10-30) */
+.dash-pick{cursor:pointer}
+.why-row,.hist-row,.corr-row,.formula-row,.audit-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:.88rem;flex-wrap:wrap}
+.why-row:last-child,.hist-row:last-child,.corr-row:last-child,.formula-row:last-child,.audit-row:last-child{border-bottom:none}
+.why-text{flex:1 1 240px}
+.why-when,.hist-when,.corr-when,.audit-when{color:var(--muted);font-size:.78rem}
+.why-tag,.audit-tag{font-size:.68rem;font-weight:700;letter-spacing:.06em;padding:2px 7px;border-radius:99px;background:#1a2233;color:var(--muted)}
+.why-correction,.audit-correction{color:#ff8a8a;background:rgba(255,80,80,.14)}
+.why-feed,.audit-feed{color:var(--cyan)}
+.why-pts,.corr-pts,.audit-pts{font-weight:700;color:var(--gold);margin-left:auto}
+.why-pts:first-child,.corr-pts:first-child,.audit-pts:first-child{margin-left:0}
+.hist-player,.corr-player{font-weight:600}
+.hist-src{font-size:.72rem;color:var(--muted)}
+.hist-sub{color:var(--cyan);font-size:.82rem;width:100%}
+.corr-text{flex:1 1 240px}
+.corr-mine{font-size:.68rem;font-weight:700;letter-spacing:.06em;padding:2px 7px;border-radius:99px;color:#0a0c11;background:var(--gold)}
+.formula-stat{font-weight:600}
+.formula-pts{margin-left:auto;font-weight:700;color:var(--gold)}
+.audit-filter{display:flex;gap:14px;flex-wrap:wrap;align-items:end}
+.audit-week{color:var(--muted);font-size:.78rem}
+.audit-member{font-weight:600}
+.audit-text{flex:1 1 240px}
+.audit-feed{color:var(--muted);font-size:.78rem}

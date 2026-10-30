@@ -279,3 +279,23 @@ CREATE TABLE IF NOT EXISTS stat_corrections (
   game_id      TEXT NOT NULL DEFAULT '',
   detected_at  TEXT NOT NULL
 );
+
+-- Unified audit log (2026-10-30): every point change carries a cause.
+-- Append-only: rows are never updated or deleted. See app/audit.py.
+CREATE TABLE IF NOT EXISTS audit_events (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  season       INTEGER NOT NULL,
+  week         INTEGER NOT NULL,
+  member_id    INTEGER,
+  player_id    TEXT,
+  kind         TEXT NOT NULL,
+  cause        TEXT NOT NULL DEFAULT '',
+  stat_key     TEXT,
+  old_value    REAL,
+  new_value    REAL,
+  points_delta REAL NOT NULL DEFAULT 0,
+  source_feed  TEXT,
+  actor        TEXT,
+  detail       TEXT NOT NULL DEFAULT '{}',
+  created_at   TEXT NOT NULL
+);

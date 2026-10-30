@@ -29,6 +29,7 @@ from . import db as _db
 from . import gamestate as _gamestate
 from . import matchup as _matchup
 from . import scoring as _scoring
+from . import audit as _audit
 
 ET = ZoneInfo("America/New_York")
 CPU_MEMBERS = (("CPU Random", "random"), ("CPU Smart", "smart"))
@@ -123,11 +124,18 @@ def run_cpu_picks(con, season: int, now_et: datetime = None) -> str:
                 break
             if pid in have:
                 continue
-            con.execute(
+            cur = con.execute(
                 "INSERT OR IGNORE INTO weekly_picks "
                 "(member_id, player_id, season, week, submitted_at) "
                 "VALUES (?, ?, ?, ?, ?)",
                 (mid, pid, season, week, stamp))
+            if cur.rowcount == 1:
+                # Audit: CPU Thursday fill (the method-test record).
+                _audit.log(con, season, week, "pick_submitted", "cpu_fill",
+                           member_id=mid, player_id=pid,
+                           source_feed="system",
+                           actor=f"cpu-{method}",
+                           detail={"cpu_method": method})
             have.add(pid)
         filled.append(f"{name} ({len(have)} picks)")
     con.commit()
@@ -270,11 +278,20 @@ def run_member_auto_picks(con, season: int, now_et: datetime = None) -> str:
             picks = member_random_picks(con, season, week, have, now_utc,
                                         open_slots)
         for pid in picks:
-            con.execute(
+            cur = con.execute(
                 "INSERT OR IGNORE INTO weekly_picks "
                 "(member_id, player_id, season, week, submitted_at, source) "
                 "VALUES (?, ?, ?, ?, ?, 'auto')",
                 (m["id"], pid, season, week, stamp))
+            if cur.rowcount == 1:
+                # Audit: member auto-pick fill (window = the pick's
+                # kickoff; method = the commissioner's setting).
+                _audit.log(con, season, week, "pick_auto_filled",
+                           "auto_fill", member_id=m["id"], player_id=pid,
+                           source_feed="system", actor="poller",
+                           detail={"method": method,
+                                   "kickoff": _db.player_kickoff(
+                                       con, pid, season, week)})
         if picks:
             filled.append(f"{m['name']} (+{len(picks)})")
     if filled:
@@ -522,6 +539,12 @@ def run_smart_subs(con, season: int, now_et: datetime = None) -> str:
             (new_pid, mid, season, week, pid))
         _log_decision(con, mid, season, week, "repick", pid, new_pid,
                       edge, gated)
+        # Audit: Smart re-pick (links the smart_decisions row by kind).
+        _audit.log(con, season, week, "repick", "smart_repick",
+                   member_id=mid, player_id=new_pid,
+                   source_feed="smart", actor="cpu-smart",
+                   detail={"out_player_id": pid, "edge": edge,
+                           "gated": gated})
         seen.discard(pid)
         seen.add(new_pid)
         edited.append(f"{s['name']} -> {new_name}")
@@ -589,13 +612,14 @@ def run_smart_subs(con, season: int, now_et: datetime = None) -> str:
         con, out_stint["player_id"], season, week)
     _, in_stats = _scoring.player_week_points(
         con, in_row["player_id"], season, week)
-    con.execute(
+    cur = con.execute(
         "INSERT INTO weekly_subs (member_id, season, week, out_player_id, "
         "in_player_id, subbed_at, game_label, out_stats, in_stats) "
         "VALUES (?,?,?,?,?,?,?,?,?)",
         (mid, season, week, out_stint["player_id"], in_row["player_id"],
          _db.utcnow_iso(), label, json.dumps(out_stats),
          json.dumps(in_stats)))
+    sub_id = cur.lastrowid
     con.execute(
         "INSERT INTO sub_events (member_id, season, week, event, "
         "out_player_id, in_player_id, detail, created_at) "
@@ -604,6 +628,18 @@ def run_smart_subs(con, season: int, now_et: datetime = None) -> str:
          f"cpu-smart edge {edge:.1f}", _db.utcnow_iso()))
     _log_decision(con, mid, season, week, "sub",
                   out_stint["player_id"], in_row["player_id"], edge, True)
+    # Audit: Smart live sub, as the member pair (links weekly_subs row).
+    _audit.log(con, season, week, "pick_subbed_out", "live_sub",
+               member_id=mid, player_id=out_stint["player_id"],
+               source_feed="smart", actor="cpu-smart",
+               detail={"sub_row": sub_id,
+                       "in_player_id": in_row["player_id"], "edge": edge})
+    _audit.log(con, season, week, "pick_subbed", "live_sub",
+               member_id=mid, player_id=in_row["player_id"],
+               source_feed="smart", actor="cpu-smart",
+               detail={"sub_row": sub_id,
+                       "out_player_id": out_stint["player_id"],
+                       "edge": edge})
     con.commit()
     msg = (f"smart subs week {week}: {out_stint['name']} -> "
            f"{in_row['name']} (edge {edge:.1f})")

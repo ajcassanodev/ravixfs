@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}How scoring works{% endblock %}
+{% block content %}
+<h2>How scoring works</h2>
+<p class="note">The rulebook: what each play is worth, when picks lock, and how corrections are handled.</p>
+<div class="dash-card">
+  <div class="dash-cardt">SCORING TABLE</div>
+  {% for row in table %}
+  <div class="formula-row"><span class="formula-stat">{{ row.stat }}</span><span class="formula-pts">{{ row.points }} pts</span></div>
+  {% endfor %}
+  <p class="note">Defensive touchdowns stack on top of the turnover that created them — a pick-6 is 3 for the interception plus 6 for the touchdown, 9 in total.</p>
+</div>
+<div class="dash-card">
+  <div class="dash-cardt">LOCK RULES</div>
+  <ul class="note">
+    <li>Each member picks 5 fresh players every week from the open pool. Repeats across members are allowed.</li>
+    <li>Each pick locks at its own player's kickoff. Before kickoff, edits are free and unlimited.</li>
+    <li>After kickoff, a pick can only change by a live substitution — 2 per member per week, same kickoff window, while the game is live. The replacement starts at 0 and the subbed-out player keeps the points already banked.</li>
+    <li>Bye-week or inactive picks score 0. There is no penalty beyond that.</li>
+    <li>Your lock receipt is on the pick row: tap any pick on the dashboard to see when you picked it, when it locked, and whether it came from you or AUTO.</li>
+  </ul>
+</div>
+<div class="dash-card">
+  <div class="dash-cardt">CORRECTIONS POLICY</div>
+  <ul class="note">
+    <li>Scores follow the official stats feed. When the official feed revises a total after a game, the site revises the score to match — that is a correction, not a bug.</li>
+    <li>Big-play corrections (sacks, turnovers, touchdowns) appear in the ticker and in the News post for that window. Tackle corrections are quieter: they appear in the <a href="/corrections">corrections feed</a> but never in the ticker.</li>
+    <li>Published News posts are never rewritten. A correction after a post goes out appends a timestamped Correction block to that post.</li>
+    <li>Every point movement is logged with its cause — pick, lock, sub, feed observation, correction, or feed switch — in the audit log. The dashboard's "Why my score changed" section shows your own trail.</li>
+    <li>No commissioner hand-edits: there is no score-editing interface. If a score ever changed with no feed or pick cause, the admin audit view's tripwire would surface it.</li>
+  </ul>
+</div>
+<p class="note"><a href="/dashboard">Back to dashboard</a> · <a href="/corrections">Corrections feed</a> · <a href="/history">Pick history</a></p>
+{% endblock %}

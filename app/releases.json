@@ -1,12 +1,24 @@
 [
  {
+  "date": "2026-10-30",
+  "version": "2026-10-30.1",
+  "title": "Unified audit system: every point movement has a cause",
+  "notes": [
+   "New append-only audit log records every point-affecting event with its cause: picks, locks, subs, re-picks, feed observations, corrections, and feed switches. The log starts with this release and grows forward \u2014 no scoring computation changed",
+   "Dashboard gains a 'Why my score changed' section under MY PICKS: your own pick and stat movements in plain language, newest first, refreshed with the 60-second poll",
+   "Tap any pick row on the dashboard for its lock receipt \u2014 picked-at, locked-at, source (You or AUTO), and sub history. A standalone Pick history page (linked from MY PICKS) archives every week the same way",
+   "New Corrections feed lists every correction that moved a scored total, newest first, with a YOUR PICKS badge when it touches your lineup. Tackle corrections appear here even though they never hit the ticker",
+   "New How scoring works page: the scoring table, lock rules, and corrections policy, linked from the dashboard. The admin audit view shows the full log with week/kind/member filters, plus a tripwire that surfaces any score write since the log began with no recorded cause"
+  ]
+ },
+ {
   "date": "2026-10-29",
   "version": "2026-10-29.3",
   "title": "CPU Smart learns from its own calls",
   "notes": [
-   "Every Smart decision now goes into a learning ledger with its predicted edge, and once its week closes the actual net is settled against it — live subs graded like the recaps grade yours, re-picks by full-week points gained vs standing pat",
-   "After each closed week the margin auto-tunes from the cumulative record: if Smart's predicted edges keep running ahead of actual nets, the margin rises and Smart demands more evidence before acting; if it keeps underpromising, the margin falls. Moves are capped at 0.25 per week inside a 0.5–2.0 band, and tuning starts after 6 judged calls",
-   "Watch it on the admin participation page, under Live substitutions. Forced inactive/bye moves don't count as judgments — only calls Smart chose to make"
+   "Every Smart decision now goes into a learning ledger with its predicted edge, and once its week closes the actual net is settled against it \u2014 live subs graded like the recaps grade yours, re-picks by full-week points gained vs standing pat",
+   "After each closed week the margin auto-tunes from the cumulative record: if Smart's predicted edges keep running ahead of actual nets, the margin rises and Smart demands more evidence before acting; if it keeps underpromising, the margin falls. Moves are capped at 0.25 per week inside a 0.5\u20132.0 band, and tuning starts after 6 judged calls",
+   "Watch it on the admin participation page, under Live substitutions. Forced inactive/bye moves don't count as judgments \u2014 only calls Smart chose to make"
   ]
  },
  {
@@ -15,7 +27,7 @@
   "title": "CPU Smart can re-pick before lockout",
   "notes": [
    "Smart now has full pre-kickoff freedom: any pick whose game hasn't started can move. An inactive or bye pick always moves to the best available unstarted player; an active pick moves only when another available player's Adj beats its own by a full point or more",
-   "Re-picks are free and unlimited like members' pre-kickoff edits, and they can cross kickoff windows — the 1.0-point margin is what keeps Smart from churning on noise. CPU Random is untouched"
+   "Re-picks are free and unlimited like members' pre-kickoff edits, and they can cross kickoff windows \u2014 the 1.0-point margin is what keeps Smart from churning on noise. CPU Random is untouched"
   ]
  },
  {
@@ -24,7 +36,7 @@
   "title": "CPU Smart manages its own lineup",
   "notes": [
    "CPU Smart now makes its own substitution decisions in real games: while a game is live it compares each picked player's projected remaining points with the best same-window replacement and swaps when the replacement leads by a full point or more",
-   "Same member rules: 2 subs a week, same kickoff window, both games live, no re-entry, and the benched player keeps banked points — Smart's swaps show up in the ticker, window recaps, and the admin Live substitutions section just like yours",
+   "Same member rules: 2 subs a week, same kickoff window, both games live, no re-entry, and the benched player keeps banked points \u2014 Smart's swaps show up in the ticker, window recaps, and the admin Live substitutions section just like yours",
    "Before kickoff, a Smart pick confirmed inactive gets a free edit to the best same-window player instead of burning a sub; CPU Random is untouched"
   ]
  },

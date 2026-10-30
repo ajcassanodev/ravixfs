@@ -168,6 +168,15 @@ def main(check: bool = False):
             wstats = []
         print(f"weekly stat rows: {len(wstats)}")
         if not check:
+            # Scoring config for audit point deltas (same map the app uses).
+            try:
+                sys.path.insert(0, os.path.join(
+                    os.path.dirname(__file__), ".."))
+                from app import audit as _audit
+                _cfg = {r["stat_key"]: r["points"] for r in con.execute(
+                    "SELECT stat_key, points FROM scoring_config")}
+            except Exception:
+                _audit, _cfg = None, {}
             latest = {}  # player_id -> (week, row) for the most recent week seen
             for w in wstats:
                 if w.get("position_group") not in DEF_GROUPS:
@@ -176,6 +185,59 @@ def main(check: bool = False):
                 vals = {}
                 for key, cols in STAT_COLS.items():
                     vals[key] = round(sum(to_float(w.get(c)) for c in cols), 2)
+                # ---- audit: diff vs the stored effective total ----
+                # The stored total is what scoring uses: nflverse weekly
+                # wins when a row exists, Tank01 live fills the gap.
+                # First nflverse appearance over a differing live value
+                # is a feed switch (the Week 7 case, now visible);
+                # later nflverse moves are observations (up) or
+                # corrections (down). No-ops log nothing.
+                if _audit is not None:
+                    try:
+                        _oldw = con.execute(
+                            "SELECT * FROM weekly_stats WHERE player_id = ? "
+                            "AND season = ? AND week = ?",
+                            (pid, int(w["season"]), int(w["week"]))).fetchone()
+                        _oldl = con.execute(
+                            "SELECT * FROM live_stats WHERE player_id = ? "
+                            "AND season = ? AND week = ?",
+                            (pid, int(w["season"]), int(w["week"]))).fetchone()
+                    except Exception:
+                        _oldw, _oldl = None, None
+                    for _key, _new in vals.items():
+                        if _oldw is not None:
+                            _eff = _oldw[_key] or 0
+                            if abs(_new - _eff) < 1e-9:
+                                continue
+                            if _new > _eff:
+                                _audit.log_stat_change(
+                                    con, int(w["season"]), int(w["week"]),
+                                    "stat_observed", pid, _key, _eff, _new,
+                                    round((_new - _eff) * _cfg.get(_key, 0), 2),
+                                    "nflverse", "feed_observation")
+                            else:
+                                _audit.log_stat_change(
+                                    con, int(w["season"]), int(w["week"]),
+                                    "stat_corrected", pid, _key, _eff, _new,
+                                    round((_new - _eff) * _cfg.get(_key, 0), 2),
+                                    "nflverse", "stat_correction")
+                        else:
+                            _live = (_oldl[_key] or 0) if _oldl else 0
+                            if abs(_new - _live) < 1e-9:
+                                continue
+                            if _oldl is not None:
+                                _audit.log_stat_change(
+                                    con, int(w["season"]), int(w["week"]),
+                                    "feed_switched", pid, _key, _live, _new,
+                                    round((_new - _live) * _cfg.get(_key, 0), 2),
+                                    "nflverse", "feed_switch",
+                                    {"previous_feed": "tank01"})
+                            elif _new != 0:
+                                _audit.log_stat_change(
+                                    con, int(w["season"]), int(w["week"]),
+                                    "stat_observed", pid, _key, 0, _new,
+                                    round(_new * _cfg.get(_key, 0), 2),
+                                    "nflverse", "feed_observation")
                 con.execute(
                     "INSERT INTO weekly_stats (player_id, season, week, tackles, sacks, "
                     "interceptions, forced_fumbles, fumble_recoveries, safeties, def_tds) "
@@ -329,6 +391,20 @@ def main(check: bool = False):
             print(_tlive.run_live(con))
         except Exception as exc:
             print(f"tank01 live skipped: {exc}")
+
+    # ---- Audit: pick locks (2026-10-30) ----
+    # Every 15-min cycle, picks whose kickoff has passed get exactly one
+    # pick_locked audit row. Idempotent; safe no-op. Never breaks the poll.
+    if not check:
+        try:
+            sys.path.insert(0, os.path.join(
+                os.path.dirname(__file__), ".."))
+            from app import audit as _audit
+            n_locks = _audit.record_locks(con)
+            if n_locks:
+                print(f"audit locks recorded: {n_locks}")
+        except Exception as exc:
+            print(f"audit locks skipped: {exc}")
 
     con.close()
     print("check mode: no writes" if check else "done")

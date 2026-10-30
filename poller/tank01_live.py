@@ -19,9 +19,17 @@ Failures never break the main poll.
 import json
 import os
 import re
+import sys
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
+
+try:
+    from app import audit as _audit
+except ImportError:
+    # tank01_fast.py runs this module with only the poller dir on path.
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+    from app import audit as _audit
 
 API_HOST = "tank01-nfl-live-in-game-real-time-statistics-nfl.p.rapidapi.com"
 ET = ZoneInfo("America/New_York")
@@ -152,7 +160,14 @@ def _record_stat_changes(con, pid, season, week, stats, old, cfg,
     stat_corrections row for a big-play total that DROPPED — an overturn
     or stat-crew correction. Drops used to be silent: the live_stats
     upsert overwrote the total with no record, so a published window
-    report kept the old numbers forever. Does not commit."""
+    report kept the old numbers forever. Does not commit.
+
+    Audit (2026-10-30): every movement also goes to audit_events with
+    its feed named — increases AND re-climbs (no dedupe skip, unlike
+    scoring_events) and EVERY drop including tackle-only ones (unlike
+    stat_corrections). The audit write is best-effort and never affects
+    the legacy writes above.
+    """
     for c in STAT_COLS:
         new_v = stats.get(c, 0)
         old_v = (old[c] if old else 0) or 0
@@ -168,15 +183,26 @@ def _record_stat_changes(con, pid, season, week, stats, old, cfg,
                     (pid, season, week, c, old_v, new_v, pts,
                      game_id, fetched_at),
                 )
-        elif new_v < old_v - 1e-9 and c in CORRECTION_STATS:
+            _audit.log_stat_change(con, season, week, "stat_observed",
+                                   pid, c, old_v, new_v, pts, "tank01",
+                                   "feed_observation",
+                                   {"game_id": game_id},
+                                   created_at=fetched_at)
+        elif new_v < old_v - 1e-9:
             pts = round((new_v - old_v) * cfg.get(c, 0), 2)
-            con.execute(
-                "INSERT INTO stat_corrections (player_id, season, week, stat_key, "
-                "old_total, new_total, points_delta, game_id, detected_at) "
-                "VALUES (?,?,?,?,?,?,?,?,?)",
-                (pid, season, week, c, old_v, new_v, pts,
-                 game_id, fetched_at),
-            )
+            if c in CORRECTION_STATS:
+                con.execute(
+                    "INSERT INTO stat_corrections (player_id, season, week, stat_key, "
+                    "old_total, new_total, points_delta, game_id, detected_at) "
+                    "VALUES (?,?,?,?,?,?,?,?,?)",
+                    (pid, season, week, c, old_v, new_v, pts,
+                     game_id, fetched_at),
+                )
+            _audit.log_stat_change(con, season, week, "stat_corrected",
+                                   pid, c, old_v, new_v, pts, "tank01",
+                                   "stat_correction",
+                                   {"game_id": game_id},
+                                   created_at=fetched_at)
 
 
 def _poll_games(con, games, key: str, now: datetime):

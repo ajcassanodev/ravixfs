@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Corrections feed{% endblock %}
+{% block content %}
+<h2>Corrections feed</h2>
+<p class="note">Every correction that moved a scored total, newest first. Tackle corrections appear here even though they never hit the ticker. This feed starts with the audit release — older corrections live in their News posts.</p>
+{% for item in items %}
+<div class="corr-row">
+  <span class="corr-player">{{ item.name }}</span>
+  <span class="dash-team">{{ item.team }}</span>
+  <span class="corr-text">{{ item.text }}</span>
+  <span class="corr-pts">{{ item.points }}</span>
+  {% if item.mine %}<span class="corr-mine">YOUR PICKS</span>{% endif %}
+  <span class="corr-when">Week {{ item.week }} · {{ item.when }}</span>
+</div>
+{% else %}
+<p class="note">No corrections recorded yet.</p>
+{% endfor %}
+<p class="note"><a href="/dashboard">Back to dashboard</a> · <a href="/formula">How scoring works</a></p>
+{% endblock %}

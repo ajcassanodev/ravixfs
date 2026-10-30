@@ -40,7 +40,7 @@
   </div>
 
   <div class="dash-card">
-    <div class="dash-cardt">MY PICKS — WEEK {{ week }} <span class="subdashes">{% for i in range(2) %}<span class="subdash{% if i < subs_left %} lit{% endif %}"></span>{% endfor %}<span class="subcount">{% if subs_left %}{{ subs_left }} SUB{% if subs_left > 1 %}S{% endif %} LEFT{% else %}NO SUBS LEFT{% endif %}</span></span> <a href="/projections" class="dash-edit" title="Edit picks on the projections page" aria-label="Edit picks">✎</a></div>
+    <div class="dash-cardt">MY PICKS — WEEK {{ week }} <span class="subdashes">{% for i in range(2) %}<span class="subdash{% if i < subs_left %} lit{% endif %}"></span>{% endfor %}<span class="subcount">{% if subs_left %}{{ subs_left }} SUB{% if subs_left > 1 %}S{% endif %} LEFT{% else %}NO SUBS LEFT{% endif %}</span></span> <a href="/projections" class="dash-edit" title="Edit picks on the projections page" aria-label="Edit picks">✎</a> <a href="/history" class="dash-edit" title="Pick history with lock receipts" aria-label="Pick history">History</a></div>
     {% if request.query_params.get('subbed') %}
     <p class="ok">Substitution saved — the new player's points count from the moment he entered.</p>
     {% elif request.query_params.get('suberr') %}
@@ -60,6 +60,18 @@
     {% else %}
     <p class="muted">No picks yet this week.</p>
     {% endfor %}
+  </div>
+
+  <div class="dash-card">
+    <div class="dash-cardt">WHY MY SCORE CHANGED — WEEK {{ week }}</div>
+    <div id="why-rows">
+    {% for e in why_changed %}
+    <div class="why-row"><span class="why-text">{{ e.text }}</span><span class="why-when">{{ e.when }}</span><span class="why-tag why-{{ e.tag|lower }}">{{ e.tag }}</span>{% if e.points != '0.0' %}<span class="why-pts">{{ e.points }}</span>{% endif %}</div>
+    {% else %}
+    <p class="muted">No point movements recorded yet this week. The audit log starts with this release and grows forward.</p>
+    {% endfor %}
+    </div>
+    <p class="note"><a href="/corrections">Corrections feed</a> · <a href="/formula">How scoring works</a> · <a href="/history">Pick history</a></p>
   </div>
 
   <div class="dash-card">
@@ -139,8 +151,45 @@
     <p class="note">Off by default. Turn it on and you'll never post a short lineup again.</p>
   </div>
 </div>
+
+<!-- Lock receipt popup: same pattern as the player card. Tapping a pick
+     row opens its receipt (picked-at, locked-at, source, sub history);
+     the SUB button still works because row clicks ignore links. -->
+<div id="receipt-overlay" class="pcard-overlay" hidden>
+  <div class="pcard" role="dialog" aria-modal="true">
+    <button type="button" class="pcard-close" aria-label="Close">&times;</button>
+    <div id="receipt-body"><p class="note">Loading…</p></div>
+  </div>
+</div>
 {% endblock %}
 {% block scripts %}
+<script>
+(function () {
+  var overlay = document.getElementById('receipt-overlay');
+  var body = document.getElementById('receipt-body');
+  var receipts = {{ receipts|tojson }};
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function close() { overlay.hidden = true; }
+  overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
+  overlay.querySelector('.pcard-close').addEventListener('click', close);
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+  document.querySelectorAll('.dash-pick').forEach(function (row) {
+    row.addEventListener('click', function (e) {
+      if (e.target.closest('a')) return;
+      var r = receipts[parseInt(row.getAttribute('data-idx'), 10)];
+      if (!r) return;
+      var html = '<h3>' + esc(r.name) + '</h3>' +
+        '<p class="note">' + esc(r.team) + ' · Week {{ week }} lock receipt</p>' +
+        '<table><tr><td>Picked</td><td>' + esc(r.picked) + '</td></tr>' +
+        '<tr><td>Locked</td><td>' + esc(r.locked) + '</td></tr>' +
+        '<tr><td>Source</td><td>' + esc(r.source) + '</td></tr></table>' +
+        (r.sub ? '<p class="note">' + esc(r.sub) + '</p>' : '');
+      body.innerHTML = html;
+      overlay.hidden = false;
+    });
+  });
+})();
+</script>
 {% include "_ticker_scripts.html" %}
 <script>
 (function () {
@@ -323,6 +372,16 @@
           '<span class="sum-when">' + esc(s.when) + '</span>' +
           '<span class="sum-pts">+' + s.points.toFixed(1) + '</span></div>';
       }).join('') : '<p class="muted">No scoring plays yet this week.</p>';
+    }
+
+    var whyEl = document.getElementById('why-rows');
+    if (whyEl && d.why_changed) {
+      whyEl.innerHTML = d.why_changed.length ? d.why_changed.map(function (e) {
+        return '<div class="why-row"><span class="why-text">' + esc(e.text) + '</span>' +
+          '<span class="why-when">' + esc(e.when) + '</span>' +
+          '<span class="why-tag why-' + e.tag.toLowerCase() + '">' + esc(e.tag) + '</span>' +
+          (e.points !== '0.0' ? '<span class="why-pts">' + esc(e.points) + '</span>' : '') + '</div>';
+      }).join('') : '<p class="muted">No point movements recorded yet this week.</p>';
     }
 
     renderTrend(d.trend || [], !!d.week_live);
