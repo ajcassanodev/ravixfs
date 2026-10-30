@@ -145,11 +145,14 @@ def run_email_reminders(con, season: int, now_et: datetime, base_url: str) -> in
         con.execute("ALTER TABLE members ADD COLUMN email TEXT")
     if "email_opt_in" not in cols:
         con.execute("ALTER TABLE members ADD COLUMN email_opt_in INTEGER NOT NULL DEFAULT 0")
+    if "is_active" not in cols:
+        con.execute("ALTER TABLE members ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1")
     week = current_pick_week(con, season)
     sent = 0
     members = con.execute(
         "SELECT id, name, email, pick_token FROM members "
-        "WHERE email_opt_in = 1 AND email IS NOT NULL AND email != ''"
+        "WHERE email_opt_in = 1 AND email IS NOT NULL AND email != '' "
+        "AND COALESCE(is_active, 1) = 1"
     ).fetchall()
     for m in members:
         addr = valid_email(m["email"])

@@ -122,11 +122,14 @@ def run_pick_reminders(con, season: int, now_et: datetime, base_url: str) -> int
         con.execute("ALTER TABLE members ADD COLUMN phone TEXT")
     if "sms_opt_in" not in cols:
         con.execute("ALTER TABLE members ADD COLUMN sms_opt_in INTEGER NOT NULL DEFAULT 0")
+    if "is_active" not in cols:
+        con.execute("ALTER TABLE members ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1")
     week = current_pick_week(con, season)
     sent = 0
     members = con.execute(
         "SELECT id, name, phone, pick_token FROM members "
-        "WHERE sms_opt_in = 1 AND phone IS NOT NULL AND phone != ''"
+        "WHERE sms_opt_in = 1 AND phone IS NOT NULL AND phone != '' "
+        "AND COALESCE(is_active, 1) = 1"
     ).fetchall()
     for m in members:
         n = con.execute(

@@ -224,7 +224,8 @@ def standings(con, season: int, through_week: int | None = None):
     them in a small "excluded" section.
     """
     members = con.execute(
-        "SELECT id, name, COALESCE(is_test, 0) AS is_test FROM members ORDER BY name"
+        "SELECT id, name, COALESCE(is_test, 0) AS is_test FROM members "
+        "WHERE COALESCE(is_active, 1) = 1 ORDER BY name"
     ).fetchall()
     if through_week is None:
         wrow = con.execute(

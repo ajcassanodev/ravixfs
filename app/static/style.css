@@ -427,3 +427,24 @@ a.upcoming{opacity:.75;font-style:italic}
 .audit-member{font-weight:600}
 .audit-text{flex:1 1 240px}
 .audit-feed{color:var(--muted);font-size:.78rem}
+
+/* Admin dashboard (2026-10-30.3) */
+.admin-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}
+.admin-tab{padding:8px 14px;border-radius:999px;border:1px solid var(--line);color:var(--muted);font-size:.88rem;text-decoration:none}
+.admin-tab.active{background:var(--gold);color:#141414;border-color:var(--gold);font-weight:700}
+.admin-add{float:right}
+.admin-mrow{padding:10px 2px;border-bottom:1px solid var(--line);cursor:pointer}
+.admin-mrow:last-child{border-bottom:none}
+.admin-mrow.dim{opacity:.55}
+.admin-mtop{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.admin-mname{font-weight:700}
+.admin-mmeta{color:var(--muted);font-size:.85rem;margin-top:2px}
+.pill{display:inline-block;font-size:.72rem;padding:2px 8px;border-radius:999px;font-weight:700;white-space:nowrap}
+.pill-full{background:rgba(80,200,120,.15);color:#7ddb8f}
+.pill-none{background:rgba(255,80,80,.14);color:#ff8a8a}
+.pill-test{background:var(--card);color:var(--muted);border:1px solid var(--line)}
+.pill-deact{background:rgba(255,80,80,.14);color:#ff8a8a}
+.admin-danger{display:inline-flex;align-items:center;min-height:40px;padding:6px 16px;font-size:.78rem;font-weight:700;border-radius:8px;background:rgba(255,80,80,.16);color:#ff8a8a;border:1px solid rgba(255,80,80,.4);font-family:'Space Grotesk',sans-serif;cursor:pointer}
+.pcard label.opt{display:block;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:6px 0;font-size:.9rem}
+.pcard label.opt small{display:block;color:var(--muted);font-size:.78rem;margin-top:2px}
+.pcard input[type="text"],.pcard input[type="number"]{background:var(--bg2);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:9px 10px;font-size:.9rem}

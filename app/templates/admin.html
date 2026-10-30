@@ -3,54 +3,254 @@
 {% block brand_sub %}ADMIN CONSOLE{% endblock %}
 {% block ticker %}{% include "_ticker.html" %}{% endblock %}
 {% block content %}
-<h2>Commissioner Admin</h2>
-<p><a href="/admin/{{ token }}/participation">Participation report →</a></p>
-<p><a href="/admin/{{ token }}/news">League News posts →</a></p>
-<p><a href="/admin/{{ token }}/audit">Audit log →</a></p>
+<h2>Commissioner Admin — Week {{ week }}</h2>
+<div class="admin-tabs">
+  <span class="admin-tab active">Overview</span>
+  <a class="admin-tab" href="/admin/{{ token }}/participation">Participation →</a>
+  <a class="admin-tab" href="/admin/{{ token }}/news">League News →</a>
+  <a class="admin-tab" href="/admin/{{ token }}/audit">Audit log →</a>
+</div>
 
-<h3>Members</h3>
-<table>
-  <tr><th>Name</th><th>Test?</th><th>Pick link</th><th>Phone</th><th>SMS?</th><th>Email</th><th>Email?</th></tr>
+<div class="dash-grid" id="admin-cards">
+  <div class="dash-card"><div class="dash-cardt">SHEETS</div><div class="dash-place" id="card-sheets">{{ cards.sheets }}</div><div class="note">active members</div></div>
+  <div class="dash-card"><div class="dash-cardt">WEEK {{ week }} FULL PICKS</div><div class="dash-place" id="card-full">{{ cards.full_picks }} / {{ cards.sheets }}</div><div class="note">sheets at 5 picks</div></div>
+  <div class="dash-card"><div class="dash-cardt">GROUP TOTAL POINTS</div><div class="dash-place" id="card-total">{{ "%.1f"|format(cards.group_total) }}</div><div class="note">all active members, all weeks</div></div>
+  <div class="dash-card"><div class="dash-cardt">GROUP AVG / WEEK</div><div class="dash-place" id="card-avg">{{ "%.1f"|format(cards.group_avg) }}</div><div class="note">across {{ cards.weeks_elapsed }} weeks</div></div>
+  <div class="dash-card"><div class="dash-cardt">SUBS USED</div><div class="dash-place" id="card-subs">{{ cards.subs_used }} / {{ cards.subs_available }}</div><div class="note">this week</div></div>
+  <div class="dash-card"><div class="dash-cardt">AUDIT TRIPWIRE</div><div class="dash-place" id="card-tripwire">{{ cards.tripwire }}</div><div class="note">score writes with no cause</div></div>
+</div>
+
+<div class="dash-card">
+  <div class="dash-cardt">MEMBERS · WEEK {{ week }} PICK STATUS <button class="admin-add" id="addBtn" type="button">+ Add member</button></div>
+  <p class="note">Tap a member to manage their auto-picks, test flag, and status.</p>
+  <div id="admin-members">
   {% for m in members %}
-  <tr><td>{{ m.name }}</td>
-      <td>{% if m.is_test %}yes{% else %}—{% endif %}</td>
-      <td><code>/submit/{{ m.pick_token }}</code></td>
-      <td>{{ m.phone or '—' }}</td>
-      <td>{% if m.sms_opt_in %}yes{% else %}—{% endif %}</td>
-      <td>{{ m.email or '—' }}</td>
-      <td>{% if m.email_opt_in %}yes{% else %}—{% endif %}</td></tr>
+  <div class="admin-mrow{% if not m.is_active %} dim{% endif %}" data-id="{{ m.id }}" data-name="{{ m.name }}" data-test="{{ m.is_test }}" data-active="{{ m.is_active }}" data-auto="{{ m.auto_method }}" data-link="{{ m.pick_link }}" data-email="{{ m.email }}">
+    <div class="admin-mtop"><span class="admin-mname">{{ m.name }}{% if m.is_test %} <span class="pill pill-test">TEST</span>{% endif %}{% if not m.is_active %} <span class="pill pill-deact">DEACTIVATED</span>{% endif %}</span>
+    <span class="pill {% if m.picks >= 5 %}pill-full{% else %}pill-none{% endif %}">{{ m.picks }} / 5 picks</span></div>
+    <div class="admin-mmeta">{% if m.auto_method == 'off' %}Auto-picks off{% elif m.auto_method == 'random' %}Auto-picks on · Random{% else %}Auto-picks on · Smart{% endif %}{% if not m.auto_toggle %} · member toggle off{% endif %}{% if m.reminder_sent %} · Reminder sent{% endif %}</div>
+  </div>
   {% endfor %}
-</table>
-<form method="post" action="/admin/{{ token }}/members/add">
-  <input name="name" placeholder="New member name" required>
-  <label><input type="checkbox" name="is_test" value="1"> test member</label>
-  <button>Add member</button>
-</form>
+  </div>
+</div>
 
-<h3>Member auto-picks</h3>
-<p>Members with the dashboard toggle ON get open slots filled before each set of games. The method below controls <em>member</em> auto-picks only — CPU Random and CPU Smart keep their fixed methods regardless.</p>
-<form method="post" action="/admin/{{ token }}/autopicks-method">
-  <label><input type="radio" name="method" value="random"{% if auto_method == 'random' %} checked{% endif %}> Random — uniform draw from the pool (can land hurt, bye, inactive)</label><br>
-  <label><input type="radio" name="method" value="smart"{% if auto_method == 'smart' %} checked{% endif %}> CPU Smart — top matchup-adjusted projections, skipping bye and non-active</label><br>
-  <button>Save method</button>
-</form>
-<p class="note">Currently: <b>{{ 'CPU Smart' if auto_method == 'smart' else 'Random' }}</b>
-  · Members with auto-picks ON: {% if auto_members %}{{ auto_members|join(', ') }}{% else %}none yet{% endif %}</p>
-
-<h3>Scoring config</h3>
-<p>Changing these recalculates <em>all</em> past weeks instantly — points are never stored.</p>
-<table>
-  <tr><th>Stat</th><th>Points</th><th></th></tr>
-  {% for s in scoring %}
-  <tr><form method="post" action="/admin/{{ token }}/scoring">
-    <td>{{ s.stat_key }}</td>
-    <td><input type="hidden" name="stat_key" value="{{ s.stat_key }}">
-        <input name="points" type="number" step="0.01" value="{{ s.points }}" size="6"></td>
-    <td><button>Update</button></td>
-  </form></tr>
+<div class="dash-card">
+  <div class="dash-cardt">LATEST ACTIVITY</div>
+  <div id="admin-activity">
+  {% for a in activity %}
+  <div class="audit-row"><span class="audit-when">{{ a.when }}</span><span class="audit-week">W{{ a.week }}</span><span class="audit-member">{{ a.member }}</span><span class="audit-text">{{ a.text }}</span><span class="audit-tag audit-{{ a.tag|lower }}">{{ a.tag }}</span></div>
+  {% else %}
+  <p class="note">No audit events yet.</p>
   {% endfor %}
-</table>
+  </div>
+</div>
 
-<datalist id="allp"></datalist>
+<div class="dash-card">
+  <div class="dash-cardt">CONTROLS</div>
+  <p>Scoring: <span id="scoringSummary">{{ scoring_summary }}</span></p>
+  <p><button class="subbtn" id="scoringBtn" type="button">Edit scoring →</button></p>
+</div>
+<p class="note" id="admin-updated">Updated {{ updated }} · refreshes every 10 seconds</p>
+
+<div class="pcard-overlay" id="manageOverlay" hidden>
+  <div class="pcard" role="dialog" aria-label="Manage member">
+    <button class="pcard-close" id="manageClose" type="button" aria-label="Close">✕</button>
+    <h3 id="popName">Member</h3>
+    <h4>PICK LINK</h4>
+    <p style="word-break:break-all"><code id="popLink">—</code></p>
+    <p><button class="subbtn" id="popCopy" type="button">Copy link</button>
+    <button class="subbtn" id="popRemind" type="button">Send pick-link reminder</button></p>
+    <p class="note" id="popRemindNote">Sends their pick link to the email on file.</p>
+    <h4>AUTO-PICKS — ADMIN CONTROL</h4>
+    <label class="opt"><input type="radio" name="auto" value="off"> Off<small>No fills. Admin Off always wins over the member's own toggle.</small></label>
+    <label class="opt"><input type="radio" name="auto" value="random"> Random<small>Uniform draw from the pool — can land hurt, bye, or inactive players.</small></label>
+    <label class="opt"><input type="radio" name="auto" value="smart"> CPU Smart<small>Top matchup-adjusted projections, skipping bye and non-active players.</small></label>
+    <h4>TEST MEMBER</h4>
+    <label class="opt"><input type="checkbox" id="popTest"> Test member<small>Shows on staging only; hidden on production.</small></label>
+    <h4>STATUS</h4>
+    <p class="note">Deactivated members are hidden from standings, get no reminders, and can't pick or sub. Their past points and history stay in the record. Reversible anytime.</p>
+    <p><button class="subbtn" id="popSave" type="button">Save changes</button>
+    <button class="subbtn" id="popCancel" type="button">Cancel</button>
+    <button class="admin-danger" id="popDeact" type="button">Deactivate member</button></p>
+    <div id="deactConfirm" hidden>
+      <p><b>Deactivate <span id="deactName">this member</span>?</b></p>
+      <p class="note">They'll be hidden from standings, get no reminders, and can't pick or sub. Their past points and history stay in the record. Reversible anytime.</p>
+      <p><button class="admin-danger" id="popDeactYes" type="button">Yes, deactivate</button>
+      <button class="subbtn" id="popDeactNo" type="button">Keep active</button></p>
+    </div>
+  </div>
+</div>
+
+<div class="pcard-overlay" id="addOverlay" hidden>
+  <div class="pcard" role="dialog" aria-label="Add member">
+    <button class="pcard-close" id="addClose" type="button" aria-label="Close">✕</button>
+    <h3>Add member</h3>
+    <form method="post" action="/admin/{{ token }}/members/add">
+      <h4>NAME</h4>
+      <p><input type="text" name="name" placeholder="Member name" required style="width:100%"></p>
+      <h4>TEST MEMBER</h4>
+      <label class="opt"><input type="checkbox" name="is_test" value="1"> Test member<small>Shows on staging only; hidden on production.</small></label>
+      <p class="note">New members start with auto-picks Off until you set it in their popup.</p>
+      <p><button class="subbtn" type="submit">Add member</button>
+      <button class="subbtn" id="addCancel" type="button">Cancel</button></p>
+    </form>
+  </div>
+</div>
+
+<div class="pcard-overlay" id="scoringOverlay" hidden>
+  <div class="pcard" role="dialog" aria-label="Scoring config">
+    <button class="pcard-close" id="scoringClose" type="button" aria-label="Close">✕</button>
+    <h3>Scoring config</h3>
+    <p class="note"><b>Changing these recalculates all past weeks instantly — points are never stored.</b></p>
+    <table>
+      <tr><th>Stat</th><th>Points</th></tr>
+      {% for s in scoring %}
+      <tr><td>{{ s.stat_key }}</td><td><input class="score-input" data-stat="{{ s.stat_key }}" type="number" step="0.01" value="{{ s.points }}" style="width:90px"></td></tr>
+      {% endfor %}
+    </table>
+    <p><button class="subbtn" id="scoringSave" type="button">Save scoring</button>
+    <button class="subbtn" id="scoringCancel" type="button">Cancel</button></p>
+  </div>
+</div>
 {% endblock %}
-{% block scripts %}{% include "_ticker_scripts.html" %}{% endblock %}
+{% block scripts %}{% include "_ticker_scripts.html" %}
+<script>
+(function(){
+  var TOKEN = "{{ token }}";
+  function esc(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+  function autoText(v){ return v === "off" ? "Auto-picks off" : (v === "random" ? "Auto-picks on · Random" : "Auto-picks on · Smart"); }
+  function rowHtml(m){
+    var pills = (m.is_test ? ' <span class="pill pill-test">TEST</span>' : '') + (!m.is_active ? ' <span class="pill pill-deact">DEACTIVATED</span>' : '');
+    var meta = autoText(m.auto_method) + (!m.auto_toggle ? " · member toggle off" : "") + (m.reminder_sent ? " · Reminder sent" : "");
+    return '<div class="admin-mrow' + (!m.is_active ? ' dim' : '') + '" data-id="' + m.id + '" data-name="' + esc(m.name) + '" data-test="' + m.is_test + '" data-active="' + m.is_active + '" data-auto="' + m.auto_method + '" data-link="' + esc(m.pick_link) + '" data-email="' + esc(m.email) + '">'
+      + '<div class="admin-mtop"><span class="admin-mname">' + esc(m.name) + pills + '</span>'
+      + '<span class="pill ' + (m.picks >= 5 ? 'pill-full' : 'pill-none') + '">' + m.picks + ' / 5 picks</span></div>'
+      + '<div class="admin-mmeta">' + meta + '</div></div>';
+  }
+  function renderMembers(members){
+    var el = document.getElementById("admin-members");
+    el.innerHTML = members.map(rowHtml).join("");
+    el.querySelectorAll(".admin-mrow").forEach(function(row){
+      row.addEventListener("click", function(){ openManage(row); });
+    });
+  }
+  function renderActivity(activity){
+    var el = document.getElementById("admin-activity");
+    if (!activity.length) { el.innerHTML = '<p class="note">No audit events yet.</p>'; return; }
+    el.innerHTML = activity.map(function(a){
+      return '<div class="audit-row"><span class="audit-when">' + esc(a.when) + '</span><span class="audit-week">W' + a.week + '</span><span class="audit-member">' + esc(a.member) + '</span><span class="audit-text">' + esc(a.text) + '</span><span class="audit-tag audit-' + esc(String(a.tag).toLowerCase()) + '">' + esc(a.tag) + '</span></div>';
+    }).join("");
+  }
+  function pollAdmin(){
+    fetch("/admin/" + TOKEN + "/dashboard.json", {cache: "no-store"}).then(function(r){ return r.json(); }).then(function(d){
+      document.getElementById("card-sheets").textContent = d.cards.sheets;
+      document.getElementById("card-full").textContent = d.cards.full_picks + " / " + d.cards.sheets;
+      document.getElementById("card-total").textContent = Number(d.cards.group_total).toFixed(1);
+      document.getElementById("card-avg").textContent = Number(d.cards.group_avg).toFixed(1);
+      document.getElementById("card-subs").textContent = d.cards.subs_used + " / " + d.cards.subs_available;
+      document.getElementById("card-tripwire").textContent = d.cards.tripwire;
+      document.getElementById("scoringSummary").textContent = d.scoring_summary;
+      document.getElementById("admin-updated").textContent = "Updated " + d.updated + " · refreshes every 10 seconds";
+      renderMembers(d.members);
+      renderActivity(d.activity);
+    }).catch(function(){});
+  }
+  setInterval(pollAdmin, 10000);
+
+  var manageOverlay = document.getElementById("manageOverlay"), current = null, currentActive = 1;
+  function openManage(row){
+    current = row; currentActive = row.dataset.active === "1" ? 1 : 0;
+    document.getElementById("popName").textContent = row.dataset.name;
+    document.getElementById("popLink").textContent = row.dataset.link;
+    document.querySelector('input[name="auto"][value="' + row.dataset.auto + '"]').checked = true;
+    document.getElementById("popTest").checked = row.dataset.test === "1";
+    var rb = document.getElementById("popRemind");
+    rb.textContent = "Send pick-link reminder"; rb.disabled = false;
+    document.getElementById("popRemindNote").textContent = row.dataset.email
+      ? "Sends their pick link to " + row.dataset.email + "."
+      : "No email on file — add one on their dashboard first.";
+    document.getElementById("popCopy").textContent = "Copy link";
+    document.getElementById("popDeact").textContent = currentActive ? "Deactivate member" : "Reactivate member";
+    document.getElementById("popDeact").style.display = "";
+    document.getElementById("deactConfirm").hidden = true;
+    document.getElementById("deactName").textContent = row.dataset.name;
+    manageOverlay.hidden = false;
+  }
+  document.getElementById("admin-members").querySelectorAll(".admin-mrow").forEach(function(row){
+    row.addEventListener("click", function(){ openManage(row); });
+  });
+  function closeManage(){ manageOverlay.hidden = true; }
+  document.getElementById("manageClose").addEventListener("click", closeManage);
+  document.getElementById("popCancel").addEventListener("click", closeManage);
+  manageOverlay.addEventListener("click", function(e){ if (e.target === manageOverlay) closeManage(); });
+  function postSettings(active){
+    var fd = new FormData();
+    fd.append("auto_method", document.querySelector('input[name="auto"]:checked').value);
+    fd.append("is_test", document.getElementById("popTest").checked ? "1" : "0");
+    fd.append("is_active", active ? "1" : "0");
+    return fetch("/admin/" + TOKEN + "/members/" + current.dataset.id + "/settings", {method: "POST", body: fd});
+  }
+  document.getElementById("popSave").addEventListener("click", function(){
+    postSettings(currentActive).then(pollAdmin).then(closeManage);
+  });
+  document.getElementById("popDeact").addEventListener("click", function(){
+    if (currentActive) {
+      document.getElementById("popDeact").style.display = "none";
+      document.getElementById("deactConfirm").hidden = false;
+    } else {
+      postSettings(1).then(pollAdmin).then(closeManage);
+    }
+  });
+  document.getElementById("popDeactYes").addEventListener("click", function(){
+    postSettings(0).then(pollAdmin).then(closeManage);
+  });
+  document.getElementById("popDeactNo").addEventListener("click", function(){
+    document.getElementById("deactConfirm").hidden = true;
+    document.getElementById("popDeact").style.display = "";
+  });
+  document.getElementById("popCopy").addEventListener("click", function(){
+    var link = document.getElementById("popLink").textContent, btn = document.getElementById("popCopy");
+    if (navigator.clipboard) { navigator.clipboard.writeText(link); }
+    btn.textContent = "Copied ✓";
+    setTimeout(function(){ btn.textContent = "Copy link"; }, 2000);
+  });
+  document.getElementById("popRemind").addEventListener("click", function(){
+    var btn = document.getElementById("popRemind");
+    fetch("/admin/" + TOKEN + "/members/" + current.dataset.id + "/remind", {method: "POST"})
+      .then(function(r){ return r.json(); }).then(function(j){
+        if (j.ok) {
+          btn.textContent = "Sent ✓"; btn.disabled = true;
+          document.getElementById("popRemindNote").textContent = "Reminder sent — their pick link is on its way.";
+        } else {
+          document.getElementById("popRemindNote").textContent = "Could not send: " + j.error + ".";
+        }
+        pollAdmin();
+      });
+  });
+
+  var addOverlay = document.getElementById("addOverlay");
+  document.getElementById("addBtn").addEventListener("click", function(){ addOverlay.hidden = false; });
+  document.getElementById("addClose").addEventListener("click", function(){ addOverlay.hidden = true; });
+  document.getElementById("addCancel").addEventListener("click", function(){ addOverlay.hidden = true; });
+  addOverlay.addEventListener("click", function(e){ if (e.target === addOverlay) addOverlay.hidden = true; });
+
+  var scoringOverlay = document.getElementById("scoringOverlay");
+  document.getElementById("scoringBtn").addEventListener("click", function(){ scoringOverlay.hidden = false; });
+  document.getElementById("scoringClose").addEventListener("click", function(){ scoringOverlay.hidden = true; });
+  document.getElementById("scoringCancel").addEventListener("click", function(){ scoringOverlay.hidden = true; });
+  scoringOverlay.addEventListener("click", function(e){ if (e.target === scoringOverlay) scoringOverlay.hidden = true; });
+  document.getElementById("scoringSave").addEventListener("click", function(){
+    var inputs = document.querySelectorAll(".score-input"), done = 0;
+    if (!inputs.length) { scoringOverlay.hidden = true; return; }
+    inputs.forEach(function(inp){
+      var fd = new FormData();
+      fd.append("stat_key", inp.dataset.stat);
+      fd.append("points", inp.value);
+      fetch("/admin/" + TOKEN + "/scoring", {method: "POST", body: fd}).then(function(){
+        if (++done === inputs.length) { pollAdmin(); scoringOverlay.hidden = true; }
+      });
+    });
+  });
+})();
+</script>
+{% endblock %}

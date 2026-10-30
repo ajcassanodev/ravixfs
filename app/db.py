@@ -40,6 +40,25 @@ def _migrate(con) -> None:
         con.execute("ALTER TABLE members ADD COLUMN email_opt_in INTEGER NOT NULL DEFAULT 0")
     if "auto_picks" not in cols:
         con.execute("ALTER TABLE members ADD COLUMN auto_picks INTEGER NOT NULL DEFAULT 0")
+    if "member_auto" not in cols:
+        # Per-member admin auto-pick setting: 'off' | 'random' | 'smart'.
+        # NULL means "not set by the admin" and follows the global setting.
+        con.execute("ALTER TABLE members ADD COLUMN member_auto TEXT")
+        try:
+            # Backfill: existing members keep the global method they were
+            # already running under, so the per-member switch changes
+            # nothing for them on deploy day.
+            con.execute(
+                "UPDATE members SET member_auto = "
+                "(SELECT value FROM settings WHERE key = 'auto_pick_method') "
+                "WHERE member_auto IS NULL AND EXISTS "
+                "(SELECT 1 FROM settings WHERE key = 'auto_pick_method')")
+        except Exception:
+            pass  # settings table predates this deploy; NULL falls back
+    if "is_active" not in cols:
+        # Deactivated members are hidden from standings/ticker, get no
+        # reminders, and can't pick or sub. History stays in the record.
+        con.execute("ALTER TABLE members ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1")
     wp_cols = {r["name"] for r in con.execute("PRAGMA table_info(weekly_picks)")}
     if "source" not in wp_cols:
         con.execute("ALTER TABLE weekly_picks ADD COLUMN source TEXT NOT NULL DEFAULT 'manual'")

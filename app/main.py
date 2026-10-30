@@ -677,7 +677,8 @@ def _ticker_data(con, season: int, include_test: bool = False) -> dict:
             week = pick_week
     entries = []
     member_lines = {}
-    where = "" if include_test else "WHERE COALESCE(is_test, 0) = 0 "
+    where = ("WHERE COALESCE(is_active, 1) = 1 " if include_test
+             else "WHERE COALESCE(is_test, 0) = 0 AND COALESCE(is_active, 1) = 1 ")
     for m in con.execute(
         "SELECT id, name FROM members " + where + "ORDER BY name"
     ):
@@ -739,7 +740,8 @@ def _ticker_data(con, season: int, include_test: bool = False) -> dict:
                 reported.add(r["window_key"])
         except Exception:
             reported = set()
-        test_filter = "" if include_test else "AND COALESCE(m.is_test, 0) = 0 "
+        test_filter = ("AND COALESCE(m.is_active, 1) = 1 " if include_test
+                       else "AND COALESCE(m.is_test, 0) = 0 AND COALESCE(m.is_active, 1) = 1 ")
         for s in con.execute(
                 "SELECT s.out_player_id, s.game_label, m.name AS member_name, "
                 "po.name AS out_name, pi.name AS in_name "
@@ -2115,6 +2117,8 @@ def _sub_member_or_404(con, token):
                     (token,)).fetchone()
     if not m:
         raise HTTPException(404, "bad pick link")
+    if dict(m).get("is_active", 1) == 0:
+        raise HTTPException(404, "account deactivated")
     return m
 
 
@@ -2264,28 +2268,220 @@ def sub_apply(token: str, out: str = Form(""), inn: str = Form("")):
 
 # ---------------- admin ----------------
 
+def _admin_dashboard_data(con, request, token: str) -> dict:
+    """Everything the admin dashboard renders and polls.
+
+    Cards are group-level only (per-member points/averages were
+    explicitly rejected in the mock review): total points accumulated
+    across all active members, and the group average per week.
+    """
+    season = _db.current_season(con)
+    week = _db.current_pick_week(con, season)
+    base = str(request.base_url).rstrip("/") + "/"
+    try:
+        members = con.execute("SELECT * FROM members ORDER BY name").fetchall()
+    except Exception:
+        members = []
+    active = [m for m in members if dict(m).get("is_active", 1) == 1]
+    rows = []
+    group_total = 0.0
+    for m in members:
+        d = dict(m)
+        mid = d["id"]
+        try:
+            cnt = con.execute(
+                "SELECT COUNT(*) c FROM weekly_picks "
+                "WHERE member_id=? AND season=? AND week=?",
+                (mid, season, week)).fetchone()["c"]
+        except Exception:
+            cnt = 0
+        method = _cpu.effective_member_method(con, m) \
+            if "member_auto" in d else _cpu.get_auto_method(con)
+        try:
+            email_sent = con.execute(
+                "SELECT 1 FROM email_reminders WHERE member_id=? AND season=? AND week=?",
+                (mid, season, week)).fetchone() is not None
+        except Exception:
+            email_sent = False
+        try:
+            sms_sent = con.execute(
+                "SELECT 1 FROM sms_reminders WHERE member_id=? AND season=? AND week=?",
+                (mid, season, week)).fetchone() is not None
+        except Exception:
+            sms_sent = False
+        if d.get("is_active", 1) == 1:
+            for w in range(1, week + 1):
+                try:
+                    pts, _ = scoring.member_week_points(con, mid, season, w)
+                except Exception:
+                    pts = 0.0
+                group_total += pts
+        rows.append({
+            "id": mid, "name": d["name"],
+            "is_test": 1 if d.get("is_test") else 0,
+            "is_active": 1 if d.get("is_active", 1) else 0,
+            "auto_toggle": 1 if d.get("auto_picks") else 0,
+            "auto_method": method,
+            "picks": cnt,
+            "pick_link": base + "submit/" + d["pick_token"],
+            "email": d.get("email") or "",
+            "email_opt_in": 1 if d.get("email_opt_in") else 0,
+            "reminder_sent": email_sent or sms_sent,
+        })
+    try:
+        weeks_elapsed = con.execute(
+            "SELECT COUNT(DISTINCT week) c FROM games "
+            "WHERE season=? AND week<=?", (season, week)).fetchone()["c"]
+    except Exception:
+        weeks_elapsed = 0
+    group_total = round(group_total, 2)
+    group_avg = round(group_total / weeks_elapsed, 2) if weeks_elapsed else 0.0
+    try:
+        subs_used = con.execute(
+            "SELECT COUNT(*) c FROM weekly_subs s JOIN members m ON m.id = s.member_id "
+            "WHERE s.season=? AND s.week=? AND COALESCE(m.is_active, 1) = 1",
+            (season, week)).fetchone()["c"]
+    except Exception:
+        subs_used = 0
+    sheets = len(active)
+    full = sum(1 for r in rows if r["is_active"] and r["picks"] >= 5)
+    try:
+        started, orphans = _audit.tripwire_orphans(con)
+    except Exception:
+        started, orphans = False, []
+    tripwire = ("not armed" if not started
+                else ("clean" if not orphans else f"{len(orphans)} flagged"))
+    activity = []
+    try:
+        names = {r["player_id"]: r["name"] for r in con.execute(
+            "SELECT player_id, name FROM players")}
+        member_names = {r["id"]: r["name"] for r in members}
+        for r in con.execute(
+                "SELECT * FROM audit_events WHERE season=? "
+                "ORDER BY created_at DESC, id DESC LIMIT 5",
+                (season,)).fetchall():
+            d = dict(r)
+            f = _audit.format_event(d, names)
+            activity.append({
+                "when": _et_stamp(d["created_at"]), "week": d["week"],
+                "member": member_names.get(d["member_id"], "League")
+                          if d["member_id"] else "League",
+                "text": f["text"], "tag": f["tag"],
+            })
+    except Exception:
+        activity = []
+    cfg = con.execute("SELECT * FROM scoring_config").fetchall()
+    scoring_rows = [{"stat_key": c["stat_key"], "points": c["points"]}
+                    for c in cfg]
+    summary = " · ".join(
+        f"{c['stat_key']} {c['points']}" for c in scoring_rows)
+    try:
+        from zoneinfo import ZoneInfo
+        updated = datetime.now(ZoneInfo("America/New_York")).strftime("%-I:%M:%S %p ET")
+    except Exception:
+        updated = datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
+    return {
+        "season": season, "week": week,
+        "cards": {
+            "sheets": sheets, "full_picks": full,
+            "group_total": group_total, "group_avg": group_avg,
+            "weeks_elapsed": weeks_elapsed,
+            "subs_used": subs_used, "subs_available": 2 * sheets,
+            "tripwire": tripwire,
+        },
+        "members": rows, "activity": activity,
+        "scoring": scoring_rows, "scoring_summary": summary,
+        "updated": updated,
+    }
+
+
 @app.get("/admin/{token}", response_class=HTMLResponse)
 def admin_home(request: Request, token: str):
     if not _admin_ok(token):
         raise HTTPException(404, "not found")
     con = _db.connect()
-    season = _db.current_season(con)
-    members = con.execute("SELECT * FROM members ORDER BY name").fetchall()
-    cfg = con.execute("SELECT * FROM scoring_config").fetchall()
-    try:
-        auto_members = [m["name"] for m in con.execute(
-            "SELECT name FROM members WHERE auto_picks = 1 ORDER BY name")]
-    except Exception:
-        auto_members = []  # auto_picks predates this deploy
-    auto_method = _cpu.get_auto_method(con)
-    ticker = _ticker_data(con, season, include_test=_is_staging_host(request.headers.get("host", "")))
+    data = _admin_dashboard_data(con, request, token)
+    ticker = _ticker_data(con, data["season"],
+                          include_test=_is_staging_host(request.headers.get("host", "")))
     con.close()
     return templates.TemplateResponse(request, "admin.html", {
-        "request": request, "token": token, "season": season,
-        "members": members, "scoring": cfg, "ticker": ticker,
-        "auto_method": auto_method,
-        "auto_members": auto_members,
+        "request": request, "token": token, **data, "ticker": ticker,
     })
+
+
+@app.get("/admin/{token}/dashboard.json")
+def admin_dashboard_json(request: Request, token: str):
+    if not _admin_ok(token):
+        return JSONResponse({"detail": "not found"}, status_code=404)
+    con = _db.connect()
+    data = _admin_dashboard_data(con, request, token)
+    con.close()
+    return JSONResponse(data)
+
+
+@app.post("/admin/{token}/members/{mid}/settings")
+def admin_member_settings(token: str, mid: int,
+                          auto_method: str = Form(""),
+                          is_test: int = Form(0),
+                          is_active: int = Form(1)):
+    if not _admin_ok(token):
+        raise HTTPException(404, "not found")
+    if auto_method not in ("off", "random", "smart"):
+        raise HTTPException(400, "unknown auto-pick method")
+    con = _db.connect()
+    m = con.execute("SELECT * FROM members WHERE id = ?", (mid,)).fetchone()
+    if not m:
+        con.close()
+        raise HTTPException(404, "no such member")
+    con.execute(
+        "UPDATE members SET member_auto=?, is_test=?, is_active=? WHERE id=?",
+        (auto_method, 1 if is_test else 0, 1 if is_active else 0, mid))
+    season = _db.current_season(con)
+    _audit.log(con, season, _db.current_pick_week(con, season),
+               "admin_action", "member_settings",
+               source_feed="admin", actor="admin",
+               detail={"action": "member_settings", "member_id": mid,
+                       "name": m["name"], "auto_method": auto_method,
+                       "is_test": 1 if is_test else 0,
+                       "is_active": 1 if is_active else 0})
+    con.commit()
+    con.close()
+    return JSONResponse({"ok": True})
+
+
+@app.post("/admin/{token}/members/{mid}/remind")
+def admin_member_remind(request: Request, token: str, mid: int):
+    if not _admin_ok(token):
+        raise HTTPException(404, "not found")
+    con = _db.connect()
+    m = con.execute("SELECT * FROM members WHERE id = ?", (mid,)).fetchone()
+    if not m:
+        con.close()
+        return JSONResponse({"ok": False, "error": "no such member"})
+    addr = _emailer.valid_email(m["email"]) if m["email"] else None
+    if not addr:
+        con.close()
+        return JSONResponse({"ok": False, "error": "no email on file"})
+    season = _db.current_season(con)
+    week = _db.current_pick_week(con, season)
+    base = str(request.base_url).rstrip("/") + "/"
+    link = base + "submit/" + m["pick_token"]
+    sent = _emailer.send_email(
+        addr, f"Ravix Prime5: your pick link (Week {week})",
+        f"Hi {m['name']},\n\nHere is your Prime5 pick link:\n{link}\n\n"
+        f"Use it to make your Week {week} picks before kickoff.\n\n"
+        f"— Ravix Fantasy Sports")
+    if sent:
+        _audit.log(con, season, week, "admin_action", "reminder_sent",
+                   source_feed="admin", actor="admin",
+                   detail={"action": "reminder_sent", "member_id": mid,
+                           "name": m["name"], "channel": "email"})
+        con.commit()
+    con.close()
+    if not sent:
+        return JSONResponse({"ok": False,
+                             "error": "email not configured or send failed"})
+    return JSONResponse({"ok": True})
 
 
 @app.post("/admin/{token}/members/add")
@@ -2298,7 +2494,7 @@ def admin_add_member(token: str, name: str = Form(""), is_test: int = Form(0)):
     con = _db.connect()
     pt = secrets.token_urlsafe(16)
     con.execute(
-        "INSERT INTO members (name, pick_token, is_test) VALUES (?,?,?)",
+        "INSERT INTO members (name, pick_token, is_test, member_auto) VALUES (?,?,?, 'off')",
         (name, pt, 1 if is_test else 0),
     )
     _season = _db.current_season(con)
@@ -2626,6 +2822,9 @@ def projections_pick(request: Request, token: str = Form(""),
     if not m:
         con.close()
         raise HTTPException(404, "bad pick link")
+    if dict(m).get("is_active", 1) == 0:
+        con.close()
+        raise HTTPException(404, "account deactivated")
     season = _db.current_season(con)
     week = _db.current_pick_week(con, season)
     prow = con.execute(
@@ -2676,6 +2875,9 @@ def projections_unpick(request: Request, token: str = Form(""),
     if not m:
         con.close()
         raise HTTPException(404, "bad pick link")
+    if dict(m).get("is_active", 1) == 0:
+        con.close()
+        raise HTTPException(404, "account deactivated")
     season = _db.current_season(con)
     week = _db.current_pick_week(con, season)
     row = con.execute(

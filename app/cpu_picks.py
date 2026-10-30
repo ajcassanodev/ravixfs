@@ -186,6 +186,23 @@ def get_auto_method(con) -> str:
     return "random"
 
 
+def effective_member_method(con, member_row) -> str:
+    """The auto-pick method that actually applies to one member.
+
+    Admin-set member_auto ('off' | 'random' | 'smart') wins. NULL means
+    the admin never set this member, so the global setting applies
+    (the pre-per-member behavior). 'off' means no fills even when the
+    member's own toggle is ON -- admin Off always wins.
+    """
+    try:
+        v = (member_row["member_auto"] or "").strip().lower()
+    except Exception:
+        v = ""
+    if v in ("off", "random", "smart"):
+        return v
+    return get_auto_method(con)
+
+
 def set_auto_method(con, method: str) -> None:
     if method not in METHODS:
         raise ValueError("unknown auto-pick method")
@@ -246,20 +263,29 @@ def member_smart_picks(con, season: int, week: int, exclude,
 
 
 def run_member_auto_picks(con, season: int, now_et: datetime = None) -> str:
-    """Fill open slots for every member with the toggle ON."""
+    """Fill open slots for every member with the toggle ON.
+
+    Each member runs under their own admin-set method (Off / Random /
+    Smart); members the admin never set follow the global method.
+    Deactivated members and CPU test members are skipped here — CPU
+    test members keep their fixed methods and Thursday fill above.
+    """
     now_et = now_et or datetime.now(ET)
     now_utc = now_et.astimezone(timezone.utc)
     week = _db.current_pick_week(con, season)
-    method = get_auto_method(con)
     stamp = datetime.now(timezone.utc).isoformat()
     filled = []
     try:
         members = con.execute(
-            "SELECT id, name FROM members WHERE auto_picks = 1").fetchall()
+            "SELECT id, name, member_auto FROM members "
+            "WHERE auto_picks = 1 AND COALESCE(is_active, 1) = 1").fetchall()
     except Exception:
         return "member auto-picks skipped: auto_picks predates this deploy"
     for m in members:
         if m["name"] in CPU_NAMES:
+            continue
+        method = effective_member_method(con, m)
+        if method == "off":
             continue
         try:
             stints = _scoring.member_week_stints(con, m["id"], season, week)
@@ -296,7 +322,7 @@ def run_member_auto_picks(con, season: int, now_et: datetime = None) -> str:
             filled.append(f"{m['name']} (+{len(picks)})")
     if filled:
         con.commit()
-    return (f"member auto-picks week {week} ({method}): "
+    return (f"member auto-picks week {week} (per-member methods): "
             + (", ".join(filled) or "nothing open"))
 
 
