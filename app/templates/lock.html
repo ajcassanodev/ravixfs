@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Members only{% endblock %}
+{% block content %}
+<h2>This game is members-only</h2>
+<p>Open your private pick link to get in — the commissioner sent it to you. That link is your login.</p>
+<p>Don't have your link? Ask Adam to send it to you.</p>
+{% if error %}
+<p class="err">That link didn't match a member. Check you pasted your pick link, not someone else's.</p>
+{% endif %}
+<form method="post" action="/locked">
+  <input type="hidden" name="next" value="{{ next_url }}">
+  <label for="lock-link">Or paste your pick link</label><br>
+  <input id="lock-link" name="pick_link" type="text" autocomplete="off" autofocus placeholder="https://prod-prime5f.ravixfs.com/submit/…" required>
+  <button type="submit">Unlock</button>
+</form>
+<p class="note">Once unlocked, this browser stays unlocked for 180 days.</p>
+{% endblock %}

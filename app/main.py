@@ -2,6 +2,7 @@
 import os
 import secrets
 from datetime import datetime, timezone
+from urllib.parse import parse_qsl, quote, urlencode, urlunparse, urlparse
 
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -17,6 +18,134 @@ BASE = os.path.dirname(__file__)
 app = FastAPI(title="ravixfs")
 app.mount("/static", StaticFiles(directory=os.path.join(BASE, "static")), name="static")
 templates = Jinja2Templates(directory=os.path.join(BASE, "templates"))
+
+
+# Production gate: the prod game (prod-prime5f / prod-pick5f) is
+# members-only, like staging. No shared key: a member opens their private
+# pick link once (or pastes it on /locked), and the browser stays unlocked
+# for 180 days. The pick token IS the credential (same as the pick link
+# itself), so storing it in a host-only HttpOnly cookie is no weaker than
+# the link. Localhost bypasses the gate: pollers and health checks hit
+# 127.0.0.1 directly, never through a public host.
+PICK_COOKIE = "prime5_pick"
+
+
+def _token_member(token: str):
+    """Member row for a pick token, or None. DB-validated."""
+    token = (token or "").strip()
+    if not token:
+        return None
+    try:
+        con = _db.connect()
+        try:
+            return con.execute(
+                "SELECT * FROM members WHERE pick_token = ?",
+                (token,),
+            ).fetchone()
+        finally:
+            con.close()
+    except Exception:
+        return None
+
+
+def _extract_pick_token(text: str) -> str:
+    """Pull a pick token out of a pasted pick link or a bare token."""
+    text = (text or "").strip()
+    if not text:
+        return ""
+    if "/submit/" in text:
+        text = text.split("/submit/", 1)[1]
+        text = text.split("?")[0].split("#")[0].split("/")[0]
+    return text.strip()
+
+
+def _set_pick_cookie(response, request: Request, token: str) -> None:
+    """Host-only cookie carrying the member's own pick token."""
+    host = (request.headers.get("host", "") or "").split(":")[0].lower()
+    kwargs = dict(key=PICK_COOKIE, value=token, path="/",
+                  httponly=True, samesite="lax",
+                  max_age=180 * 24 * 3600)
+    if host not in ("localhost", "127.0.0.1"):
+        kwargs["secure"] = True
+    response.set_cookie(**kwargs)
+
+
+def _clean_url_without_token(request: Request) -> str:
+    """Same URL with the ?token= param stripped, so the pick token doesn't
+    linger in the address bar, history, or logs."""
+    parsed = urlparse(str(request.url))
+    kept = [(k, v) for k, v in parse_qsl(parsed.query) if k != "token"]
+    return urlunparse(parsed._replace(query=urlencode(kept)))
+
+
+def _gate_unlocked(request: Request) -> bool:
+    """True when this browser's pick cookie resolves to a member."""
+    try:
+        cookie = (request.cookies.get(PICK_COOKIE, "") or "").strip()
+        return _token_member(cookie) is not None
+    except Exception:
+        return False
+
+
+@app.middleware("http")
+async def _prod_gate(request: Request, call_next):
+    """Gate the prod game behind a personal pick link.
+
+    - /locked and /static/* always pass.
+    - /submit/<token> always passes: it IS the front door, and opening it
+      sets the pick cookie (see submit_form).
+    - /admin/* always passes through: the handler still enforces ADMIN_TOKEN.
+    - ?token=<pick token> on any URL unlocks, then redirects to the same
+      URL minus the token.
+    - Otherwise a validated pick cookie passes; everyone else goes to /locked.
+    """
+    host = (request.headers.get("host", "") or "").lower().split(":")[0]
+    if host in ("localhost", "127.0.0.1"):
+        return await call_next(request)
+    path = request.url.path
+    if path in ("/locked",) or path.startswith("/static/"):
+        return await call_next(request)
+    if path.startswith("/submit/") or path.startswith("/admin/"):
+        return await call_next(request)
+    token_param = request.query_params.get("token", "")
+    if token_param and _token_member(token_param) is not None:
+        resp = RedirectResponse(_clean_url_without_token(request) or "/", status_code=303)
+        _set_pick_cookie(resp, request, token_param.strip())
+        return resp
+    if _gate_unlocked(request):
+        return await call_next(request)
+    nxt = request.url.path
+    kept = [(k, v) for k, v in parse_qsl(request.url.query) if k != "token"]
+    if kept:
+        nxt += "?" + urlencode(kept)
+    return RedirectResponse(f"/locked?next={quote(nxt, safe='')}", status_code=303)
+
+
+@app.get("/locked", response_class=HTMLResponse)
+def prod_locked(request: Request, next: str = "/", token: str = ""):
+    """Members-only lock page. ?token= here also unlocks (same as on any URL)."""
+    if token and _token_member(token) is not None:
+        resp = RedirectResponse(next or "/", status_code=303)
+        _set_pick_cookie(resp, request, token.strip())
+        return resp
+    if _gate_unlocked(request):
+        return RedirectResponse(next or "/", status_code=303)
+    return templates.TemplateResponse(request, "lock.html", {
+        "request": request, "next_url": next or "/", "error": False,
+    })
+
+
+@app.post("/locked", response_class=HTMLResponse)
+def prod_locked_post(request: Request, pick_link: str = Form(""),
+                       next: str = Form("/")):
+    token = _extract_pick_token(pick_link)
+    if token and _token_member(token) is not None:
+        resp = RedirectResponse(next or "/", status_code=303)
+        _set_pick_cookie(resp, request, token)
+        return resp
+    return templates.TemplateResponse(request, "lock.html", {
+        "request": request, "next_url": next or "/", "error": True,
+    })
 
 
 def _admin_ok(token: str) -> bool:
@@ -155,12 +284,15 @@ def submit_form(request: Request, token: str):
         (m["id"], season, week),
     ).fetchall()
     con.close()
-    return templates.TemplateResponse(request, "submit.html", {
+    resp = templates.TemplateResponse(request, "submit.html", {
         "request": request, "member": m, "season": season, "week": week,
         "locked": locked, "players": players, "locked_names": locked_names,
         "kickoffs": kos, "now": now,
         "existing": [e["name"] for e in existing], "errors": [], "token": token,
     })
+    # Opening the pick link unlocks browsing, same as /locked.
+    _set_pick_cookie(resp, request, token)
+    return resp
 
 
 @app.post("/submit/{token}", response_class=HTMLResponse)
